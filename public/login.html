@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="auth-page">
+  <div class="auth-card">
+    <h2 class="page-title" style="font-size: 1.8rem; margin-bottom: 6px;">Attendance System</h2>
+    <p class="page-subtitle" style="margin-bottom: 22px;">Secure sign in for administrators and employees.</p>
+
+    <div id="roleSelect">
+      <p style="font-weight: 700; margin-bottom: 12px;">Select Login Type</p>
+      <button id="adminBtn" class="btn-primary" style="width:100%; margin-bottom:10px;">Sign in as Admin</button>
+      <button id="userBtn" class="btn-secondary" style="width:100%;">Sign in as Employee</button>
+    </div>
+
+    <div id="loginForm" style="display:none;">
+      <p id="formTitle" style="font-weight:700; margin-bottom:14px;">Login</p>
+
+      <div id="emailGroup" style="display:none; margin-bottom:12px;">
+        <label>Email</label>
+        <input id="email" placeholder="admin email" />
+      </div>
+
+      <div id="iqamaGroup" style="display:none; margin-bottom:12px;">
+        <label>Iqama Number</label>
+        <input id="iqama_number" placeholder="10-digit iqama number" maxlength="10" inputmode="numeric" />
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label>Password</label>
+        <input id="password" type="password" placeholder="Enter password" />
+      </div>
+
+      <button id="loginBtn" class="btn-primary" style="width:100%; margin-top:6px;">Login</button>
+      <button id="backBtn" class="btn-ghost" style="width:100%; margin-top:8px;">Back</button>
+
+      <p id="msg" class="message error"></p>
+    </div>
+  </div>
+
+  <script src="/login.js" defer></script>
+</body>
+</html>

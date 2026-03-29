@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Assignments - Attendance</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="page">
+    <div class="page-header">
+      <div>
+        <h2 class="page-title">Assignments</h2>
+        <p class="page-subtitle">Assign one or more employees to a site with a schedule window.</p>
+      </div>
+      <div class="top-links">
+        <a href="/admin" class="link-btn">Back to Admin</a>
+        <button id="logoutBtn" class="btn-secondary">Logout</button>
+      </div>
+    </div>
+
+    <p id="msg" class="message error"></p>
+
+    <div class="card section">
+      <h3>Create Assignment</h3>
+      <div class="grid" style="grid-template-columns: 1.3fr 1fr 1fr 1fr;">
+        <div>
+          <div class="inline-actions" style="margin-top:0; margin-bottom:12px;">
+            <button type="button" id="selectAllEmpBtn" class="btn-secondary">Select All</button>
+            <button type="button" id="clearAllEmpBtn" class="btn-ghost">Clear</button>
+          </div>
+          <div id="assignEmpList" class="checkbox-panel"></div>
+        </div>
+
+        <div>
+          <label>Site</label>
+          <select id="assignSite"></select>
+        </div>
+
+        <div>
+          <label>Start</label>
+          <input id="assignStart" type="datetime-local" />
+        </div>
+
+        <div>
+          <label>End</label>
+          <input id="assignEnd" type="datetime-local" />
+        </div>
+      </div>
+
+      <div class="inline-actions">
+        <button id="createAssignBtn" class="btn-primary">Create Assignment</button>
+      </div>
+    </div>
+
+    <div class="card section">
+      <h3>All Assignments</h3>
+      <div id="assignmentsList"></div>
+    </div>
+  </div>
+
+  <script src="/assignments.js" defer></script>
+</body>
+</html>

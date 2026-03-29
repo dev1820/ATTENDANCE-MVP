@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Enroll Face</title>
+  <style>
+    body {
+      font-family: Arial;
+      background: #f5f9ff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .card {
+      background: white;
+      padding: 24px;
+      border-radius: 16px;
+      width: 400px;
+      text-align: center;
+    }
+
+    video {
+      width: 100%;
+      border-radius: 12px;
+      margin-bottom: 12px;
+    }
+
+    button {
+      padding: 10px 16px;
+      margin: 6px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .primary {
+      background: #2563eb;
+      color: white;
+    }
+
+    .secondary {
+      background: #ddd;
+    }
+
+    .msg {
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>Enroll Face</h2>
+
+  <video id="video" autoplay></video>
+
+  <div>
+    <button class="primary" onclick="capture()">Capture</button>
+    <button class="secondary" onclick="goBack()">Back</button>
+  </div>
+
+  <p id="msg" class="msg"></p>
+</div>
+
+<script>
+const video = document.getElementById("video");
+const msg = document.getElementById("msg");
+
+// get employee id from URL
+const params = new URLSearchParams(window.location.search);
+const employeeId = params.get("id");
+
+// start webcam
+navigator.mediaDevices.getUserMedia({ video: true })
+  .then(stream => {
+    video.srcObject = stream;
+  })
+  .catch(() => {
+    msg.textContent = "Camera access denied";
+  });
+
+function capture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0);
+
+  const base64 = canvas.toDataURL("image/jpeg").split(",")[1];
+
+  upload(base64);
+}
+
+async function upload(image_base64) {
+  msg.textContent = "Uploading...";
+
+  try {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(`/admin/employees/${employeeId}/enroll-face`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ image_base64 })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || "Failed");
+
+    msg.style.color = "green";
+    msg.textContent = "Face enrolled successfully!";
+
+  } catch (e) {
+    msg.style.color = "red";
+    msg.textContent = e.message;
+  }
+}
+
+function goBack() {
+  window.location.href = "/admin.html";
+}
+</script>
+
+</body>
+</html>

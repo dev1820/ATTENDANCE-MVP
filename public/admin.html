@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Attendance</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="page">
+    <div class="page-header">
+      <div>
+        <h2 class="page-title">Admin Panel</h2>
+        <p class="page-subtitle">Manage sites, employees, and monitor attendance records.</p>
+      </div>
+      <div class="top-links">
+        <a href="/assignments" class="link-btn">Assignments</a>
+        <button id="logoutBtn" class="btn-secondary">Logout</button>
+      </div>
+    </div>
+
+    <p id="msg" class="message error"></p>
+
+    <div class="card section">
+      <h3>Create Site</h3>
+      <div class="grid grid-5">
+        <input id="siteName" placeholder="Site name" />
+        <input id="siteLat" placeholder="Latitude" />
+        <input id="siteLng" placeholder="Longitude" />
+        <input id="siteRadius" placeholder="Radius in meters" />
+        <input id="sitePin" placeholder="PIN" />
+      </div>
+      <div class="inline-actions">
+        <button id="createSiteBtn" class="btn-primary">Create Site</button>
+      </div>
+    </div>
+
+    <div class="card section">
+      <h3>Create Employee</h3>
+      <div class="grid grid-4">
+        <input id="empName" placeholder="Full name" />
+        <input id="empIqama" placeholder="10-digit iqama number" maxlength="10" inputmode="numeric" />
+        <input id="empPass" placeholder="Password" />
+        <select id="empCategory">
+          <option value="">Select category</option>
+          <option value="StarCare">StarCare</option>
+          <option value="Outsider">Outsider</option>
+        </select>
+      </div>
+      <div class="inline-actions">
+        <button id="createEmpBtn" class="btn-primary">Create Employee</button>
+      </div>
+    </div>
+
+    <div class="card section">
+      <h3>Employees</h3>
+      <div id="employeesList"></div>
+    </div>
+
+    <div class="card section">
+      <h3>Sites</h3>
+      <div id="sitesList"></div>
+    </div>
+
+    <div class="card section">
+      <h3>Attendance (latest 200)</h3>
+      <div id="attendanceList"></div>
+    </div>
+  </div>
+
+  <script src="/admin.js" defer></script>
+</body>
+</html>
