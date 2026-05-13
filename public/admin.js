@@ -275,4 +275,58 @@ document.getElementById("createEmpBtn").onclick = async () => {
   await loadOverview();
 };
 
+const summaryTabBtn = document.getElementById("summaryTabBtn");
+const homeSection = document.getElementById("homeSection");
+const summarySection = document.getElementById("summarySection");
+
+if (summaryTabBtn) {
+  summaryTabBtn.onclick = async () => {
+    homeSection.style.display = "none";
+    summarySection.style.display = "block";
+    await loadSummary();
+  };
+}
+
+async function loadSummary() {
+  const box = document.getElementById("summaryTable");
+
+  const r = await api("/admin/summary", { method: "GET" });
+
+  if (!r.ok) {
+    box.innerHTML = `<p class="message error">${esc(r.data.error || "Failed to load summary")}</p>`;
+    return;
+  }
+
+  const rows = r.data.rows || [];
+
+  box.innerHTML = rows.length
+    ? `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Employee Name</th>
+            <th>Iqama Number</th>
+            <th>Site</th>
+            <th>Check In</th>
+            <th>Check Out</th>
+            <th>Method</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(row => `
+            <tr>
+              <td>${esc(row.full_name)}</td>
+              <td>${esc(row.iqama_number)}</td>
+              <td>${esc(row.site_name || "Unknown")}</td>
+              <td>${esc(fmt(row.check_in_at))}</td>
+              <td>${esc(row.check_out_at ? fmt(row.check_out_at) : "Open")}</td>
+              <td>${esc(row.method || "")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `
+    : `<div class="small-note">No attendance records found.</div>`;
+}
+
 loadOverview();

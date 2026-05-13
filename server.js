@@ -1045,6 +1045,31 @@ app.post("/admin/assignments", auth, adminOnly, async (req, res) => {
   }
 });
 
+app.get("/admin/summary", auth, adminOnly, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        e.id AS employee_id,
+        e.full_name,
+        e.iqama_number,
+        s.name AS site_name,
+        a.check_in_at,
+        a.check_out_at,
+        a.method
+      FROM attendance a
+      JOIN employees e ON e.id = a.employee_id
+      LEFT JOIN sites s ON s.id = a.site_id
+      WHERE e.is_admin = false
+      ORDER BY a.check_in_at DESC
+    `);
+
+    res.json({ rows: result.rows });
+  } catch (err) {
+    console.error("Admin summary error:", err);
+    res.status(500).json({ error: "Failed to load summary" });
+  }
+});
+
 app.post("/admin/assignments/:id/cancel", auth, adminOnly, async (req, res) => {
   try {
     const id = Number(req.params.id);

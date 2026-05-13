@@ -330,3 +330,65 @@ label {
     align-items: flex-start;
   }
 }
+
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  background: #111827;
+  color: white;
+  padding: 24px 16px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.sidebar h2 {
+  margin-bottom: 24px;
+}
+
+.sidebar-link {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  color: white;
+  text-decoration: none;
+  border-radius: 10px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.sidebar-link:hover,
+.sidebar-link.active {
+  background: #2563eb;
+}
+
+.logout {
+  margin-top: 30px;
+  background: #991b1b;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 12px;
+  text-align: left;
+}
+
+.data-table th {
+  background: #f9fafb;
+  font-weight: 600;
+}

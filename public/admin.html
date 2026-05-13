@@ -6,8 +6,21 @@
   <title>Admin - Attendance</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
-
 <body>
+  <div class="admin-layout">
+    <aside class="sidebar">
+      <h2>Admin</h2>
+
+      <a href="/admin" class="sidebar-link active">Home</a>
+      <a href="/assignments" class="sidebar-link">Assignments</a>
+      <button id="summaryTabBtn" class="sidebar-link sidebar-button">Summary</button>
+
+      <button id="logoutBtn" class="sidebar-link sidebar-button logout">Logout</button>
+    </aside>
+
+    <main class="page">
+      <div id="homeSection">
+        <body>
   <div class="page">
     <div class="page-header">
       <div>
@@ -79,7 +92,26 @@
       <div id="attendanceList"></div>
     </div>
   </div>
+</body>
+      </div>
+
+      <div id="summarySection" style="display:none;">
+        <div class="page-header">
+          <div>
+            <h2 class="page-title">Attendance Summary</h2>
+            <p class="page-subtitle">Employee attendance records by site.</p>
+          </div>
+        </div>
+
+        <div class="card section">
+          <h3>Summary</h3>
+          <div id="summaryTable"></div>
+        </div>
+      </div>
+    </main>
+  </div>
 
   <script src="/admin.js" defer></script>
 </body>
+
 </html>

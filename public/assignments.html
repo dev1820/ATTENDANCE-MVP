@@ -7,7 +7,19 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <div class="page">
+  <div class="admin-layout">
+    <aside class="sidebar">
+      <h2>Admin</h2>
+
+      <a href="/admin" class="sidebar-link">Home</a>
+      <a href="/assignments" class="sidebar-link active">Assignments</a>
+      <a href="/admin#summary" class="sidebar-link">Summary</a>
+
+      <button id="logoutBtn" class="sidebar-link sidebar-button logout">Logout</button>
+    </aside>
+
+    <main class="page">
+      <div class="page">
     <div class="page-header">
       <div>
         <h2 class="page-title">Assignments</h2>
@@ -57,6 +69,8 @@
       <h3>All Assignments</h3>
       <div id="assignmentsList"></div>
     </div>
+  </div>
+    </main>
   </div>
 
   <script src="/assignments.js" defer></script>
