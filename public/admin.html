@@ -6,13 +6,17 @@
   <title>Admin - Attendance</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
+
 <body>
   <div class="page">
     <div class="page-header">
       <div>
         <h2 class="page-title">Admin Panel</h2>
-        <p class="page-subtitle">Manage sites, employees, and monitor attendance records.</p>
+        <p class="page-subtitle">
+          Manage sites, employees, face enrollment, and monitor attendance records.
+        </p>
       </div>
+
       <div class="top-links">
         <a href="/assignments" class="link-btn">Assignments</a>
         <button id="logoutBtn" class="btn-secondary">Logout</button>
@@ -23,6 +27,7 @@
 
     <div class="card section">
       <h3>Create Site</h3>
+
       <div class="grid grid-5">
         <input id="siteName" placeholder="Site name" />
         <input id="siteLat" placeholder="Latitude" />
@@ -30,6 +35,7 @@
         <input id="siteRadius" placeholder="Radius in meters" />
         <input id="sitePin" placeholder="PIN" />
       </div>
+
       <div class="inline-actions">
         <button id="createSiteBtn" class="btn-primary">Create Site</button>
       </div>
@@ -37,6 +43,7 @@
 
     <div class="card section">
       <h3>Create Employee</h3>
+
       <div class="grid grid-4">
         <input id="empName" placeholder="Full name" />
         <input id="empIqama" placeholder="10-digit iqama number" maxlength="10" inputmode="numeric" />
@@ -47,13 +54,18 @@
           <option value="Outsider">Outsider</option>
         </select>
       </div>
+
       <div class="inline-actions">
         <button id="createEmpBtn" class="btn-primary">Create Employee</button>
       </div>
     </div>
 
     <div class="card section">
-      <h3>Employees</h3>
+      <h3>Employees & Face Enrollment</h3>
+      <p class="page-subtitle">
+        Upload a clear front-facing image to enroll or update an employee’s face reference.
+      </p>
+
       <div id="employeesList"></div>
     </div>
 

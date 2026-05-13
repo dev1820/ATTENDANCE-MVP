@@ -14,9 +14,10 @@ async function api(path, opts = {}) {
     headers: {
       ...(opts.headers || {}),
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`
+      Authorization: `Bearer ${token}`
     }
   });
+
   const data = await r.json().catch(() => ({}));
   return { ok: r.ok, status: r.status, data };
 }
@@ -26,7 +27,7 @@ function showError(e) {
 }
 
 function esc(s) {
-  return String(s).replace(/[&<>"']/g, m => ({
+  return String(s ?? "").replace(/[&<>"']/g, m => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
@@ -42,16 +43,64 @@ function fmt(iso) {
   return d.toLocaleString();
 }
 
-function enrollFace(id) {
-  window.location.href = `/enroll-face.html?id=${id}`;
+async function enrollFaceFromUpload(employeeId) {
+  const fileInput = document.getElementById(`faceFile-${employeeId}`);
+
+  if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+    alert("Please select a clear face image first.");
+    return;
+  }
+
+  const file = fileInput.files[0];
+
+  if (!file.type.startsWith("image/")) {
+    alert("Please upload a valid image file.");
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = async () => {
+    try {
+      const base64WithPrefix = reader.result;
+      const image_base64 = base64WithPrefix.split(",")[1];
+
+      const res = await fetch(`/admin/employees/${employeeId}/enroll-face`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ image_base64 })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        alert(data.error || "Face enrollment failed");
+        return;
+      }
+
+      alert("Face enrolled successfully.");
+      await loadOverview();
+
+    } catch (err) {
+      console.error(err);
+      alert("Something went wrong while enrolling face.");
+    }
+  };
+
+  reader.readAsDataURL(file);
 }
 
 async function loadOverview() {
   const r = await api("/admin/overview", { method: "GET" });
+
   if (!r.ok) {
     showError(r.data.error || "Not authorized. Login as admin.");
     return;
   }
+
   showError("");
 
   const employees = r.data.employees || [];
@@ -61,8 +110,8 @@ async function loadOverview() {
   const empMap = new Map(employees.map(e => [e.id, e]));
   const siteMap = new Map(sites.map(s => [s.id, s]));
 
-  // Employees list
   const employeesDiv = document.getElementById("employeesList");
+
   if (employeesDiv) {
     employeesDiv.innerHTML = employees.length
       ? employees.map(e => {
@@ -73,13 +122,27 @@ async function loadOverview() {
           return `
             <div class="list-card">
               <div class="list-card-title">${esc(employeeLabel)}</div>
+
               <div class="small-note">
                 ${e.is_admin ? "Admin" : "Employee"}
-                ${!e.is_admin && e.face_enrolled ? " • Face enrolled" : !e.is_admin ? " • Face not enrolled" : ""}
+                ${!e.is_admin && e.face_enrolled ? " • Face enrolled ✅" : !e.is_admin ? " • Face not enrolled ❌" : ""}
               </div>
+
               ${!e.is_admin ? `
-                <div class="inline-actions">
-                  <button onclick="enrollFace(${e.id})" class="btn-secondary">Enroll Face</button>
+                <div class="inline-actions" style="margin-top: 10px; gap: 10px; align-items: center; flex-wrap: wrap;">
+                  <input 
+                    type="file" 
+                    id="faceFile-${e.id}" 
+                    accept="image/*" 
+                    class="file-input"
+                  />
+                  <button onclick="enrollFaceFromUpload(${e.id})" class="btn-secondary">
+                    Upload & Enroll Face
+                  </button>
+                </div>
+
+                <div class="small-note">
+                  Upload a clear front-facing image with one visible face.
                 </div>
               ` : ""}
             </div>
@@ -88,8 +151,8 @@ async function loadOverview() {
       : `<div class="small-note">No employees created yet.</div>`;
   }
 
-  // Sites list
   const sitesDiv = document.getElementById("sitesList");
+
   sitesDiv.innerHTML = sites.length
     ? sites.map(s => `
       <div class="list-card">
@@ -106,12 +169,13 @@ async function loadOverview() {
     `).join("")
     : `<div class="small-note">No sites created yet.</div>`;
 
-  // Attendance list
   const attDiv = document.getElementById("attendanceList");
+
   attDiv.innerHTML = attendance.length
     ? attendance.map(a => {
         const e = empMap.get(a.employee_id);
         const s = siteMap.get(a.site_id);
+
         const employeeLabel = e
           ? `${e.full_name}${e.iqama_number ? ` (${e.iqama_number})` : e.email ? ` (${e.email})` : ""}`
           : "Unknown";
@@ -127,7 +191,6 @@ async function loadOverview() {
     : `<div class="small-note">No attendance records yet.</div>`;
 }
 
-// Expose functions for inline buttons
 window.resetPin = async (siteId) => {
   const pin = document.getElementById(`pin_${siteId}`).value.trim();
   if (!pin) return alert("Enter a PIN");
@@ -138,11 +201,12 @@ window.resetPin = async (siteId) => {
   });
 
   if (!r.ok) return alert(r.data.error || "Failed");
+
   alert("PIN reset");
   await loadOverview();
 };
 
-window.enrollFace = enrollFace;
+window.enrollFaceFromUpload = enrollFaceFromUpload;
 
 document.getElementById("createSiteBtn").onclick = async () => {
   const name = document.getElementById("siteName").value.trim();
@@ -163,7 +227,15 @@ document.getElementById("createSiteBtn").onclick = async () => {
   });
 
   if (!r.ok) return alert(r.data.error || "Failed");
+
   alert("Site created");
+
+  document.getElementById("siteName").value = "";
+  document.getElementById("siteLat").value = "";
+  document.getElementById("siteLng").value = "";
+  document.getElementById("siteRadius").value = "";
+  document.getElementById("sitePin").value = "";
+
   await loadOverview();
 };
 
@@ -202,12 +274,5 @@ document.getElementById("createEmpBtn").onclick = async () => {
 
   await loadOverview();
 };
-
-function datetimeLocalToIso(value) {
-  if (!value) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString().replace(/\.\d{3}Z$/, "Z");
-}
 
 loadOverview();
