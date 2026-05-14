@@ -85,7 +85,7 @@
         <div class="card section">
           <h3>Existing Employees & Face Enrollment</h3>
           <p class="page-subtitle">
-            Upload a clear front-facing image to enroll or update an employee’s face reference.
+            Upload a clear front-facing image to enroll or update an employee's face reference.
           </p>
 
           <div id="employeesList"></div>
@@ -131,14 +131,34 @@
           <div>
             <h2 class="page-title">Attendance Summary</h2>
             <p class="page-subtitle">
-              Employee attendance records by site.
+              Filter attendance by daily, weekly, monthly records and employee.
             </p>
           </div>
         </div>
 
-        <div class="card section">
-          <h3>Summary</h3>
-          <div id="summaryTable"></div>
+        <div class="summary-layout">
+          <div class="card section summary-filter-card">
+            <h3>Employees</h3>
+            <p class="page-subtitle">Select one employee at a time.</p>
+
+            <div id="summaryEmployeeList"></div>
+
+            <button id="clearSummaryEmployeeBtn" class="btn-secondary" style="margin-top: 16px;">
+              Clear
+            </button>
+          </div>
+
+          <div class="card section summary-table-card">
+            <div class="summary-topbar">
+              <div class="summary-tabs">
+                <button id="dailySummaryBtn" class="summary-tab active">Daily</button>
+                <button id="weeklySummaryBtn" class="summary-tab">Weekly</button>
+                <button id="monthlySummaryBtn" class="summary-tab">Monthly</button>
+              </div>
+            </div>
+
+            <div id="summaryTable"></div>
+          </div>
         </div>
       </section>
 

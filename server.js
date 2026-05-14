@@ -1047,7 +1047,21 @@ app.post("/admin/assignments", auth, adminOnly, async (req, res) => {
 
 app.get("/admin/summary", auth, adminOnly, async (req, res) => {
   try {
-    const result = await pool.query(`
+    const period = req.query.period || "daily";
+    const employeeId = req.query.employee_id ? Number(req.query.employee_id) : null;
+
+    let dateFilter = "a.check_in_at::date = CURRENT_DATE";
+
+    if (period === "weekly") {
+      dateFilter = "a.check_in_at >= date_trunc('week', NOW())";
+    }
+
+    if (period === "monthly") {
+      dateFilter = "a.check_in_at >= date_trunc('month', NOW())";
+    }
+
+    const result = await pool.query(
+      `
       SELECT
         e.id AS employee_id,
         e.full_name,
@@ -1060,8 +1074,12 @@ app.get("/admin/summary", auth, adminOnly, async (req, res) => {
       JOIN employees e ON e.id = a.employee_id
       LEFT JOIN sites s ON s.id = a.site_id
       WHERE e.is_admin = false
+        AND ${dateFilter}
+        AND ($1::int IS NULL OR e.id = $1::int)
       ORDER BY a.check_in_at DESC
-    `);
+      `,
+      [employeeId]
+    );
 
     res.json({ rows: result.rows });
   } catch (err) {

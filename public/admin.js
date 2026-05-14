@@ -1,12 +1,12 @@
 const token = localStorage.getItem("token");
 if (!token) window.location.href = "/";
 
+const msg = document.getElementById("msg");
+
 document.getElementById("logoutBtn").onclick = () => {
   localStorage.removeItem("token");
   window.location.href = "/";
 };
-
-const msg = document.getElementById("msg");
 
 async function api(path, opts = {}) {
   const r = await fetch(path, {
@@ -43,6 +43,32 @@ function fmt(iso) {
   return d.toLocaleString();
 }
 
+function showSection(sectionName) {
+  const sections = {
+    home: document.getElementById("homeSection"),
+    employees: document.getElementById("employeesSection"),
+    sites: document.getElementById("sitesSection"),
+    summary: document.getElementById("summarySection")
+  };
+
+  Object.values(sections).forEach(section => {
+    if (section) section.style.display = "none";
+  });
+
+  if (sections[sectionName]) {
+    sections[sectionName].style.display = "block";
+  }
+
+  document.querySelectorAll(".sidebar-link").forEach(btn => {
+    btn.classList.remove("active");
+  });
+
+  if (sectionName === "home") document.getElementById("homeTabBtn")?.classList.add("active");
+  if (sectionName === "employees") document.getElementById("employeesTabBtn")?.classList.add("active");
+  if (sectionName === "sites") document.getElementById("sitesTabBtn")?.classList.add("active");
+  if (sectionName === "summary") document.getElementById("summaryTabBtn")?.classList.add("active");
+}
+
 async function enrollFaceFromUpload(employeeId) {
   const fileInput = document.getElementById(`faceFile-${employeeId}`);
 
@@ -62,8 +88,7 @@ async function enrollFaceFromUpload(employeeId) {
 
   reader.onload = async () => {
     try {
-      const base64WithPrefix = reader.result;
-      const image_base64 = base64WithPrefix.split(",")[1];
+      const image_base64 = reader.result.split(",")[1];
 
       const res = await fetch(`/admin/employees/${employeeId}/enroll-face`, {
         method: "POST",
@@ -93,6 +118,19 @@ async function enrollFaceFromUpload(employeeId) {
   reader.readAsDataURL(file);
 }
 
+window.enrollFaceFromUpload = enrollFaceFromUpload;
+
+window.showSelectedFileName = function (employeeId) {
+  const input = document.getElementById(`faceFile-${employeeId}`);
+  const label = document.getElementById(`fileName-${employeeId}`);
+
+  if (!input || !label) return;
+
+  label.textContent = input.files.length
+    ? input.files[0].name
+    : "No image selected";
+};
+
 async function loadOverview() {
   const r = await api("/admin/overview", { method: "GET" });
 
@@ -104,6 +142,8 @@ async function loadOverview() {
   showError("");
 
   const employees = r.data.employees || [];
+  cachedEmployees = employees;
+  renderSummaryEmployees();
   const sites = r.data.sites || [];
   const attendance = r.data.attendance || [];
 
@@ -112,7 +152,7 @@ async function loadOverview() {
 
   const employeesDiv = document.getElementById("employeesList");
 
-    if (employeesDiv) {
+  if (employeesDiv) {
     employeesDiv.innerHTML = employees.length
       ? `
         <div class="table-wrap">
@@ -138,7 +178,7 @@ async function loadOverview() {
                   <td>${e.is_admin ? "-" : e.face_enrolled ? "Enrolled ✅" : "Not enrolled ❌"}</td>
                   <td>
                     ${!e.is_admin ? `
-                      <label for="faceFile-${e.id}" class="file-upload-btn">
+                      <label for="faceFile-${e.id}" class="btn-secondary file-upload-btn">
                         Choose Image
                       </label>
 
@@ -150,7 +190,7 @@ async function loadOverview() {
                         onchange="showSelectedFileName(${e.id})"
                       />
 
-                     
+                      <span id="fileName-${e.id}" class="file-name-text"></span>
                     ` : "-"}
                   </td>
                   <td>
@@ -169,77 +209,71 @@ async function loadOverview() {
       : `<div class="small-note">No employees created yet.</div>`;
   }
 
-  window.showSelectedFileName = function (employeeId) {
-  const input = document.getElementById(`faceFile-${employeeId}`);
-  const label = document.getElementById(`fileName-${employeeId}`);
-
-  if (!input || !label) return;
-
-  label.textContent = input.files.length
-    ? input.files[0].name
-    : "No image selected";
-  };
   const sitesDiv = document.getElementById("sitesList");
 
-  sitesDiv.innerHTML = sites.length
-  ? `
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Site Name</th>
-            <th>Latitude</th>
-            <th>Longitude</th>
-            <th>Radius</th>
-            <th>PIN Updated</th>
-            <th>New PIN</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${sites.map(s => `
-            <tr>
-              <td>${esc(s.name)}</td>
-              <td>${esc(String(s.latitude))}</td>
-              <td>${esc(String(s.longitude))}</td>
-              <td>${esc(String(s.radius_m))}m</td>
-              <td>${esc(fmt(s.pin_updated_at))}</td>
-              <td>
-                <input id="pin_${s.id}" placeholder="New PIN" class="table-input" />
-              </td>
-              <td>
-                <button onclick="resetPin(${s.id})" class="btn-secondary">
-                  Reset
-                </button>
-              </td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    </div>
-  `
-  : `<div class="small-note">No sites created yet.</div>`;
+  if (sitesDiv) {
+    sitesDiv.innerHTML = sites.length
+      ? `
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Site Name</th>
+                <th>Latitude</th>
+                <th>Longitude</th>
+                <th>Radius</th>
+                <th>PIN Updated</th>
+                <th>New PIN</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sites.map(s => `
+                <tr>
+                  <td>${esc(s.name)}</td>
+                  <td>${esc(String(s.latitude))}</td>
+                  <td>${esc(String(s.longitude))}</td>
+                  <td>${esc(String(s.radius_m))}m</td>
+                  <td>${esc(fmt(s.pin_updated_at))}</td>
+                  <td>
+                    <input id="pin_${s.id}" placeholder="New PIN" class="table-input" />
+                  </td>
+                  <td>
+                    <button onclick="resetPin(${s.id})" class="btn-secondary">
+                      Reset
+                    </button>
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `
+      : `<div class="small-note">No sites created yet.</div>`;
+  }
 
   const attDiv = document.getElementById("attendanceList");
 
-  attDiv.innerHTML = attendance.length
-    ? attendance.map(a => {
-        const e = empMap.get(a.employee_id);
-        const s = siteMap.get(a.site_id);
+  if (attDiv) {
+    attDiv.innerHTML = attendance.length
+      ? attendance.map(a => {
+          const e = empMap.get(a.employee_id);
+          const s = siteMap.get(a.site_id);
 
-        const employeeLabel = e
-          ? `${e.full_name}${e.iqama_number ? ` (${e.iqama_number})` : e.email ? ` (${e.email})` : ""}`
-          : "Unknown";
+          const employeeLabel = e
+            ? `${e.full_name}${e.iqama_number ? ` (${e.iqama_number})` : e.email ? ` (${e.email})` : ""}`
+            : "Unknown";
 
-        return `
-          <div class="attendance-item">
-            <div class="list-card-title">${esc(employeeLabel)} @ ${esc(s?.name || "Unknown")}</div>
-            <div class="small-note">IN: ${esc(fmt(a.check_in_at))}</div>
-            <div class="small-note">OUT: ${esc(a.check_out_at ? fmt(a.check_out_at) : "(open)")}</div>
-          </div>
-        `;
-      }).join("")
-    : `<div class="small-note">No attendance records yet.</div>`;
+          return `
+            <div class="attendance-item">
+              <div class="list-card-title">${esc(employeeLabel)} @ ${esc(s?.name || "Unknown")}</div>
+              <div class="small-note">IN: ${esc(fmt(a.check_in_at))}</div>
+              <div class="small-note">OUT: ${esc(a.check_out_at ? fmt(a.check_out_at) : "(open)")}</div>
+            </div>
+          `;
+        }).join("")
+      : `<div class="small-note">No attendance records yet.</div>`;
+  }
 }
 
 window.resetPin = async (siteId) => {
@@ -257,9 +291,7 @@ window.resetPin = async (siteId) => {
   await loadOverview();
 };
 
-window.enrollFaceFromUpload = enrollFaceFromUpload;
-
-document.getElementById("createSiteBtn").onclick = async () => {
+document.getElementById("createSiteBtn")?.addEventListener("click", async () => {
   const name = document.getElementById("siteName").value.trim();
   const latitude = document.getElementById("siteLat").value.trim();
   const longitude = document.getElementById("siteLng").value.trim();
@@ -288,9 +320,9 @@ document.getElementById("createSiteBtn").onclick = async () => {
   document.getElementById("sitePin").value = "";
 
   await loadOverview();
-};
+});
 
-document.getElementById("createEmpBtn").onclick = async () => {
+document.getElementById("createEmpBtn")?.addEventListener("click", async () => {
   const full_name = document.getElementById("empName").value.trim();
   const iqama_number = document.getElementById("empIqama").value.trim();
   const password = document.getElementById("empPass").value.trim();
@@ -324,47 +356,74 @@ document.getElementById("createEmpBtn").onclick = async () => {
   document.getElementById("empCategory").value = "";
 
   await loadOverview();
-};
+});
 
-const summaryTabBtn = document.getElementById("summaryTabBtn");
-const homeSection = document.getElementById("homeSection");
-const summarySection = document.getElementById("summarySection");
+let currentSummaryPeriod = "daily";
+let selectedSummaryEmployeeId = null;
+let cachedEmployees = [];
 
-if (summaryTabBtn) {
-  summaryTabBtn.onclick = async () => {
-    homeSection.style.display = "none";
-    summarySection.style.display = "block";
-    await loadSummary();
-  };
+function renderSummaryEmployees() {
+  const box = document.getElementById("summaryEmployeeList");
+  if (!box) return;
+
+  const employeesOnly = cachedEmployees.filter(e => !e.is_admin);
+
+  box.innerHTML = employeesOnly.length
+    ? employeesOnly.map(e => `
+      <label class="summary-employee-item">
+        <input
+          type="checkbox"
+          ${Number(selectedSummaryEmployeeId) === Number(e.id) ? "checked" : ""}
+          onchange="selectSummaryEmployee(${e.id})"
+        />
+        <span>
+          ${esc(e.full_name)}
+          <div class="summary-employee-meta">${esc(e.iqama_number || "-")}</div>
+        </span>
+      </label>
+    `).join("")
+    : `<div class="small-note">No employees found.</div>`;
 }
 
-function showSection(sectionName) {
-  const sections = {
-    home: document.getElementById("homeSection"),
-    employees: document.getElementById("employeesSection"),
-    sites: document.getElementById("sitesSection"),
-    summary: document.getElementById("summarySection")
-  };
+window.selectSummaryEmployee = function (employeeId) {
+  selectedSummaryEmployeeId = Number(employeeId);
+  renderSummaryEmployees();
+  loadSummary();
+};
 
-  Object.values(sections).forEach(section => {
-    if (section) section.style.display = "none";
+function clearSummaryEmployeeFilter() {
+  selectedSummaryEmployeeId = null;
+  renderSummaryEmployees();
+  loadSummary();
+}
+
+function setSummaryTab(period) {
+  currentSummaryPeriod = period;
+
+  document.querySelectorAll(".summary-tab").forEach(btn => {
+    btn.classList.remove("active");
   });
 
-  sections[sectionName].style.display = "block";
-}
+  if (period === "daily") document.getElementById("dailySummaryBtn")?.classList.add("active");
+  if (period === "weekly") document.getElementById("weeklySummaryBtn")?.classList.add("active");
+  if (period === "monthly") document.getElementById("monthlySummaryBtn")?.classList.add("active");
 
-document.getElementById("homeTabBtn").onclick = () => showSection("home");
-document.getElementById("employeesTabBtn").onclick = () => showSection("employees");
-document.getElementById("sitesTabBtn").onclick = () => showSection("sites");
-document.getElementById("summaryTabBtn").onclick = async () => {
-  showSection("summary");
-  await loadSummary();
-};
+  loadSummary();
+}
 
 async function loadSummary() {
   const box = document.getElementById("summaryTable");
+  if (!box) return;
 
-  const r = await api("/admin/summary", { method: "GET" });
+  const query = new URLSearchParams({
+    period: currentSummaryPeriod
+  });
+
+  if (selectedSummaryEmployeeId) {
+    query.set("employee_id", selectedSummaryEmployeeId);
+  }
+
+  const r = await api(`/admin/summary?${query.toString()}`, { method: "GET" });
 
   if (!r.ok) {
     box.innerHTML = `<p class="message error">${esc(r.data.error || "Failed to load summary")}</p>`;
@@ -372,9 +431,12 @@ async function loadSummary() {
   }
 
   const rows = r.data.rows || [];
+  const selectedEmployee = cachedEmployees.find(
+    e => Number(e.id) === Number(selectedSummaryEmployeeId)
+  );
 
-  box.innerHTML = rows.length
-    ? `
+  box.innerHTML = `
+    <div class="table-wrap">
       <table class="data-table">
         <thead>
           <tr>
@@ -387,20 +449,68 @@ async function loadSummary() {
           </tr>
         </thead>
         <tbody>
-          ${rows.map(row => `
-            <tr>
-              <td>${esc(row.full_name)}</td>
-              <td>${esc(row.iqama_number)}</td>
-              <td>${esc(row.site_name || "Unknown")}</td>
-              <td>${esc(fmt(row.check_in_at))}</td>
-              <td>${esc(row.check_out_at ? fmt(row.check_out_at) : "Open")}</td>
-              <td>${esc(row.method || "")}</td>
-            </tr>
-          `).join("")}
+          ${
+            rows.length
+              ? rows.map(row => `
+                <tr>
+                  <td>${esc(row.full_name)}</td>
+                  <td>${esc(row.iqama_number)}</td>
+                  <td>${esc(row.site_name || "Unknown")}</td>
+                  <td>${esc(fmt(row.check_in_at))}</td>
+                  <td>${esc(row.check_out_at ? fmt(row.check_out_at) : "Open")}</td>
+                  <td>${esc(row.method || "")}</td>
+                </tr>
+              `).join("")
+              : `
+                <tr>
+                  <td>${esc(selectedEmployee?.full_name || "N/A")}</td>
+                  <td>${esc(selectedEmployee?.iqama_number || "N/A")}</td>
+                  <td>N/A</td>
+                  <td>N/A</td>
+                  <td>N/A</td>
+                  <td>N/A</td>
+                </tr>
+              `
+          }
         </tbody>
       </table>
-    `
-    : `<div class="small-note">No attendance records found.</div>`;
+    </div>
+  `;
 }
 
+document.getElementById("homeTabBtn")?.addEventListener("click", () => showSection("home"));
+document.getElementById("employeesTabBtn")?.addEventListener("click", () => showSection("employees"));
+document.getElementById("sitesTabBtn")?.addEventListener("click", () => showSection("sites"));
+
+document.getElementById("summaryTabBtn")?.addEventListener("click", async () => {
+  showSection("summary");
+  await loadSummary();
+});
+
+document.getElementById("goEmployeesBtn")?.addEventListener("click", () => showSection("employees"));
+document.getElementById("goSitesBtn")?.addEventListener("click", () => showSection("sites"));
+
+document.getElementById("dailySummaryBtn")?.addEventListener("click", () => setSummaryTab("daily"));
+document.getElementById("weeklySummaryBtn")?.addEventListener("click", () => setSummaryTab("weekly"));
+document.getElementById("monthlySummaryBtn")?.addEventListener("click", () => setSummaryTab("monthly"));
+document.getElementById("clearSummaryEmployeeBtn")?.addEventListener("click", clearSummaryEmployeeFilter);
+document.getElementById("summarySearchInput")?.addEventListener("input", () => {
+  loadSummary();
+});
+
 loadOverview();
+const initialHash = window.location.hash.replace("#", "");
+if (window.location.hash === "#summary") {
+  showSection("summary");
+  loadSummary();
+}
+if (initialHash === "summary") {
+  showSection("summary");
+  loadSummary();
+} else if (initialHash === "employees") {
+  showSection("employees");
+} else if (initialHash === "sites") {
+  showSection("sites");
+} else {
+  showSection("home");
+}
