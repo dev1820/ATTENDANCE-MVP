@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { Amplify } from "aws-amplify";
 import { FaceLivenessDetector } from "@aws-amplify/ui-react-liveness";
-console.log(import.meta.env.VITE_AWS_REGION);
-console.log(import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID);
 
 Amplify.configure({
   Auth: {

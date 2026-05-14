@@ -112,62 +112,113 @@ async function loadOverview() {
 
   const employeesDiv = document.getElementById("employeesList");
 
-  if (employeesDiv) {
+    if (employeesDiv) {
     employeesDiv.innerHTML = employees.length
-      ? employees.map(e => {
-          const employeeLabel = e.is_admin
-            ? `${e.full_name}${e.email ? ` (${e.email})` : ""}`
-            : `${e.full_name}${e.iqama_number ? ` (${e.iqama_number})` : ""}${e.employee_category ? ` - ${e.employee_category}` : ""}`;
+      ? `
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Iqama / Email</th>
+                <th>Category</th>
+                <th>Role</th>
+                <th>Face Status</th>
+                <th>Upload Face</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${employees.map(e => `
+                <tr>
+                  <td>${esc(e.full_name)}</td>
+                  <td>${esc(e.is_admin ? e.email || "-" : e.iqama_number || "-")}</td>
+                  <td>${esc(e.employee_category || "-")}</td>
+                  <td>${e.is_admin ? "Admin" : "Employee"}</td>
+                  <td>${e.is_admin ? "-" : e.face_enrolled ? "Enrolled ✅" : "Not enrolled ❌"}</td>
+                  <td>
+                    ${!e.is_admin ? `
+                      <label for="faceFile-${e.id}" class="file-upload-btn">
+                        Choose Image
+                      </label>
 
-          return `
-            <div class="list-card">
-              <div class="list-card-title">${esc(employeeLabel)}</div>
+                      <input 
+                        type="file" 
+                        id="faceFile-${e.id}" 
+                        accept="image/*"
+                        class="hidden-file-input"
+                        onchange="showSelectedFileName(${e.id})"
+                      />
 
-              <div class="small-note">
-                ${e.is_admin ? "Admin" : "Employee"}
-                ${!e.is_admin && e.face_enrolled ? " • Face enrolled ✅" : !e.is_admin ? " • Face not enrolled ❌" : ""}
-              </div>
-
-              ${!e.is_admin ? `
-                <div class="inline-actions" style="margin-top: 10px; gap: 10px; align-items: center; flex-wrap: wrap;">
-                  <input 
-                    type="file" 
-                    id="faceFile-${e.id}" 
-                    accept="image/*" 
-                    class="file-input"
-                  />
-                  <button onclick="enrollFaceFromUpload(${e.id})" class="btn-secondary">
-                    Upload & Enroll Face
-                  </button>
-                </div>
-
-                <div class="small-note">
-                  Upload a clear front-facing image with one visible face.
-                </div>
-              ` : ""}
-            </div>
-          `;
-        }).join("")
+                     
+                    ` : "-"}
+                  </td>
+                  <td>
+                    ${!e.is_admin ? `
+                      <button onclick="enrollFaceFromUpload(${e.id})" class="btn-secondary">
+                        Upload
+                      </button>
+                    ` : "-"}
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `
       : `<div class="small-note">No employees created yet.</div>`;
   }
 
+  window.showSelectedFileName = function (employeeId) {
+  const input = document.getElementById(`faceFile-${employeeId}`);
+  const label = document.getElementById(`fileName-${employeeId}`);
+
+  if (!input || !label) return;
+
+  label.textContent = input.files.length
+    ? input.files[0].name
+    : "No image selected";
+  };
   const sitesDiv = document.getElementById("sitesList");
 
   sitesDiv.innerHTML = sites.length
-    ? sites.map(s => `
-      <div class="list-card">
-        <div class="list-card-title">${esc(s.name)}</div>
-        <div class="list-card-meta">
-          Lat/Lng: ${esc(String(s.latitude))}, ${esc(String(s.longitude))} • Radius: ${esc(String(s.radius_m))}m
-        </div>
-        <div class="small-note">PIN updated: ${esc(s.pin_updated_at || "")}</div>
-        <div class="inline-actions">
-          <input id="pin_${s.id}" placeholder="New PIN" style="max-width: 220px;" />
-          <button onclick="resetPin(${s.id})" class="btn-secondary">Reset PIN</button>
-        </div>
-      </div>
-    `).join("")
-    : `<div class="small-note">No sites created yet.</div>`;
+  ? `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Site Name</th>
+            <th>Latitude</th>
+            <th>Longitude</th>
+            <th>Radius</th>
+            <th>PIN Updated</th>
+            <th>New PIN</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sites.map(s => `
+            <tr>
+              <td>${esc(s.name)}</td>
+              <td>${esc(String(s.latitude))}</td>
+              <td>${esc(String(s.longitude))}</td>
+              <td>${esc(String(s.radius_m))}m</td>
+              <td>${esc(fmt(s.pin_updated_at))}</td>
+              <td>
+                <input id="pin_${s.id}" placeholder="New PIN" class="table-input" />
+              </td>
+              <td>
+                <button onclick="resetPin(${s.id})" class="btn-secondary">
+                  Reset
+                </button>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `
+  : `<div class="small-note">No sites created yet.</div>`;
 
   const attDiv = document.getElementById("attendanceList");
 
@@ -286,6 +337,29 @@ if (summaryTabBtn) {
     await loadSummary();
   };
 }
+
+function showSection(sectionName) {
+  const sections = {
+    home: document.getElementById("homeSection"),
+    employees: document.getElementById("employeesSection"),
+    sites: document.getElementById("sitesSection"),
+    summary: document.getElementById("summarySection")
+  };
+
+  Object.values(sections).forEach(section => {
+    if (section) section.style.display = "none";
+  });
+
+  sections[sectionName].style.display = "block";
+}
+
+document.getElementById("homeTabBtn").onclick = () => showSection("home");
+document.getElementById("employeesTabBtn").onclick = () => showSection("employees");
+document.getElementById("sitesTabBtn").onclick = () => showSection("sites");
+document.getElementById("summaryTabBtn").onclick = async () => {
+  showSection("summary");
+  await loadSummary();
+};
 
 async function loadSummary() {
   const box = document.getElementById("summaryTable");

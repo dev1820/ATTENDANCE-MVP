@@ -6,12 +6,15 @@
   <title>Admin - Attendance</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
+
 <body>
   <div class="admin-layout">
     <aside class="sidebar">
       <h2>Admin</h2>
 
-      <a href="/admin" class="sidebar-link active">Home</a>
+      <button id="homeTabBtn" class="sidebar-link sidebar-button active">Home</button>
+      <button id="employeesTabBtn" class="sidebar-link sidebar-button">Employees</button>
+      <button id="sitesTabBtn" class="sidebar-link sidebar-button">Sites</button>
       <a href="/assignments" class="sidebar-link">Assignments</a>
       <button id="summaryTabBtn" class="sidebar-link sidebar-button">Summary</button>
 
@@ -19,87 +22,117 @@
     </aside>
 
     <main class="page">
-      <div id="homeSection">
-        <body>
-  <div class="page">
-    <div class="page-header">
-      <div>
-        <h2 class="page-title">Admin Panel</h2>
-        <p class="page-subtitle">
-          Manage sites, employees, face enrollment, and monitor attendance records.
-        </p>
-      </div>
+      <p id="msg" class="message error"></p>
 
-      <div class="top-links">
-        <a href="/assignments" class="link-btn">Assignments</a>
-        <button id="logoutBtn" class="btn-secondary">Logout</button>
-      </div>
-    </div>
+      <!-- HOME SECTION -->
+      <section id="homeSection" class="admin-section">
+        <div class="page-header">
+          <div>
+            <h2 class="page-title">Admin Panel</h2>
+            <p class="page-subtitle">
+              Manage employees, sites, assignments, face enrollment, and attendance records.
+            </p>
+          </div>
+        </div>
 
-    <p id="msg" class="message error"></p>
+        <div class="card section">
+          <h3>Welcome</h3>
+          <p class="page-subtitle">
+            Your main dashboard overview will be added here later.
+          </p>
+        </div>
 
-    <div class="card section">
-      <h3>Create Site</h3>
+        <div class="card section">
+          <h3>Quick Actions</h3>
+          <div class="inline-actions">
+            <button id="goEmployeesBtn" class="btn-primary">Manage Employees</button>
+            <button id="goSitesBtn" class="btn-secondary">Manage Sites</button>
+            <a href="/assignments" class="link-btn">Manage Assignments</a>
+          </div>
+        </div>
+      </section>
 
-      <div class="grid grid-5">
-        <input id="siteName" placeholder="Site name" />
-        <input id="siteLat" placeholder="Latitude" />
-        <input id="siteLng" placeholder="Longitude" />
-        <input id="siteRadius" placeholder="Radius in meters" />
-        <input id="sitePin" placeholder="PIN" />
-      </div>
+      <!-- EMPLOYEES SECTION -->
+      <section id="employeesSection" class="admin-section" style="display:none;">
+        <div class="page-header">
+          <div>
+            <h2 class="page-title">Employees</h2>
+            <p class="page-subtitle">
+              Create employees and enroll their face reference images.
+            </p>
+          </div>
+        </div>
 
-      <div class="inline-actions">
-        <button id="createSiteBtn" class="btn-primary">Create Site</button>
-      </div>
-    </div>
+        <div class="card section">
+          <h3>Create Employee</h3>
 
-    <div class="card section">
-      <h3>Create Employee</h3>
+          <div class="grid grid-4">
+            <input id="empName" placeholder="Full name" />
+            <input id="empIqama" placeholder="10-digit iqama number" maxlength="10" inputmode="numeric" />
+            <input id="empPass" placeholder="Password" />
+            <select id="empCategory">
+              <option value="">Select category</option>
+              <option value="StarCare">StarCare</option>
+              <option value="Outsider">Outsider</option>
+            </select>
+          </div>
 
-      <div class="grid grid-4">
-        <input id="empName" placeholder="Full name" />
-        <input id="empIqama" placeholder="10-digit iqama number" maxlength="10" inputmode="numeric" />
-        <input id="empPass" placeholder="Password" />
-        <select id="empCategory">
-          <option value="">Select category</option>
-          <option value="StarCare">StarCare</option>
-          <option value="Outsider">Outsider</option>
-        </select>
-      </div>
+          <div class="inline-actions">
+            <button id="createEmpBtn" class="btn-primary">Create Employee</button>
+          </div>
+        </div>
 
-      <div class="inline-actions">
-        <button id="createEmpBtn" class="btn-primary">Create Employee</button>
-      </div>
-    </div>
+        <div class="card section">
+          <h3>Existing Employees & Face Enrollment</h3>
+          <p class="page-subtitle">
+            Upload a clear front-facing image to enroll or update an employee’s face reference.
+          </p>
 
-    <div class="card section">
-      <h3>Employees & Face Enrollment</h3>
-      <p class="page-subtitle">
-        Upload a clear front-facing image to enroll or update an employee’s face reference.
-      </p>
+          <div id="employeesList"></div>
+        </div>
+      </section>
 
-      <div id="employeesList"></div>
-    </div>
+      <!-- SITES SECTION -->
+      <section id="sitesSection" class="admin-section" style="display:none;">
+        <div class="page-header">
+          <div>
+            <h2 class="page-title">Sites</h2>
+            <p class="page-subtitle">
+              Create work sites, manage geofence radius, and reset site PINs.
+            </p>
+          </div>
+        </div>
 
-    <div class="card section">
-      <h3>Sites</h3>
-      <div id="sitesList"></div>
-    </div>
+        <div class="card section">
+          <h3>Create Site</h3>
 
-    <div class="card section">
-      <h3>Attendance (latest 200)</h3>
-      <div id="attendanceList"></div>
-    </div>
-  </div>
-</body>
-      </div>
+          <div class="grid grid-5">
+            <input id="siteName" placeholder="Site name" />
+            <input id="siteLat" placeholder="Latitude" />
+            <input id="siteLng" placeholder="Longitude" />
+            <input id="siteRadius" placeholder="Radius in meters" />
+            <input id="sitePin" placeholder="PIN" />
+          </div>
 
-      <div id="summarySection" style="display:none;">
+          <div class="inline-actions">
+            <button id="createSiteBtn" class="btn-primary">Create Site</button>
+          </div>
+        </div>
+
+        <div class="card section">
+          <h3>Existing Sites</h3>
+          <div id="sitesList"></div>
+        </div>
+      </section>
+
+      <!-- SUMMARY SECTION -->
+      <section id="summarySection" class="admin-section" style="display:none;">
         <div class="page-header">
           <div>
             <h2 class="page-title">Attendance Summary</h2>
-            <p class="page-subtitle">Employee attendance records by site.</p>
+            <p class="page-subtitle">
+              Employee attendance records by site.
+            </p>
           </div>
         </div>
 
@@ -107,11 +140,27 @@
           <h3>Summary</h3>
           <div id="summaryTable"></div>
         </div>
-      </div>
+      </section>
+
+      <!-- ATTENDANCE SECTION -->
+      <section id="attendanceSection" class="admin-section" style="display:none;">
+        <div class="page-header">
+          <div>
+            <h2 class="page-title">Attendance</h2>
+            <p class="page-subtitle">
+              Latest attendance records.
+            </p>
+          </div>
+        </div>
+
+        <div class="card section">
+          <h3>Attendance (latest 200)</h3>
+          <div id="attendanceList"></div>
+        </div>
+      </section>
     </main>
   </div>
 
   <script src="/admin.js" defer></script>
 </body>
-
 </html>
