@@ -1228,7 +1228,7 @@ app.post("/admin/projects", auth, adminOnly, async (req, res) => {
         (project_id, employee_id, created_at)
         VALUES ($1, $2, NOW())
         `,
-        [projectId, Number(employeeId)]
+        [project.id, Number(employeeId)]
       );
     }
 
@@ -1318,7 +1318,7 @@ app.put("/admin/projects/:id", auth, adminOnly, async (req, res) => {
         VALUES ($1, $2, NOW())
         ON CONFLICT (project_id, employee_id) DO NOTHING
         `,
-        [projectId, Number(employeeId)]
+        [project.id, Number(employeeId)]
       );
     }
 
