@@ -1374,7 +1374,7 @@ app.put("/admin/projects/:id", auth, adminOnly, async (req, res) => {
         VALUES ($1, $2, NOW())
         ON CONFLICT (project_id, employee_id) DO NOTHING
         `,
-        [project.id, Number(employeeId)]
+        [projectId, Number(employeeId)]
       );
     }
 
