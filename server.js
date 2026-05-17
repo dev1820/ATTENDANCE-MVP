@@ -403,21 +403,28 @@ async function verifyPunch({ employeeId, siteId, pin, lat, lng, accuracy_m }) {
   const site = siteResult.rows[0];
   if (!site) return { ok: false, status: 404, error: "Site not found" };
 
-  const assignmentResult = await pool.query(
-    `SELECT *
-     FROM assignments
-     WHERE employee_id = $1
-       AND site_id = $2
-       AND status = 'active'
-       AND NOW() >= start_at
-       AND (end_at IS NULL OR NOW() <= end_at)
-     ORDER BY id DESC
-     LIMIT 1`,
+  const projectResult = await pool.query(
+    `
+    SELECT p.*
+    FROM project_employees pe
+    JOIN projects p ON p.id = pe.project_id
+    WHERE pe.employee_id = $1
+      AND p.site_id = $2
+      AND p.status = 'active'
+      AND CURRENT_DATE BETWEEN p.start_date AND p.end_date
+      AND LOCALTIME BETWEEN p.shift_start AND p.shift_end
+    ORDER BY p.id DESC
+    LIMIT 1
+    `,
     [employeeId, site.id]
   );
 
-  if (assignmentResult.rows.length === 0) {
-    return { ok: false, status: 403, error: "Not assigned to this site right now" };
+  if (projectResult.rows.length === 0) {
+    return {
+      ok: false,
+      status: 403,
+      error: "You are not assigned to this project during the current shift time"
+    };
   }
 
   const pinOk = bcrypt.compareSync(String(pin), site.pin_hash);
