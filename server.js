@@ -1382,7 +1382,7 @@ app.put("/admin/projects/:id", auth, adminOnly, async (req, res) => {
 
     res.json({
       ok: true,
-      project: updateResult.rows[0]
+      project_id: projectId
     });
   } catch (err) {
     await client.query("ROLLBACK");
