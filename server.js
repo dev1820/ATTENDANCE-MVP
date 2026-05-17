@@ -340,32 +340,42 @@ app.get("/me/face-status", auth, async (req, res) => {
 app.get("/me/assigned-sites", auth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT
-         s.id AS site_id,
-         s.name,
-         s.radius_m,
-         a.start_at,
-         a.end_at,
-         CASE
-           WHEN NOW() >= a.start_at
-            AND (a.end_at IS NULL OR NOW() <= a.end_at)
-           THEN true
-           ELSE false
-         END AS can_check_in_now
-       FROM assignments a
-       JOIN sites s ON s.id = a.site_id
-       WHERE a.employee_id = $1
-         AND a.status = 'active'
-       ORDER BY a.start_at DESC`,
+      `
+      SELECT
+        s.id AS site_id,
+        s.name,
+        s.radius_m,
+        p.id AS project_id,
+        p.start_date,
+        p.end_date,
+        p.shift_start,
+        p.shift_end,
+        p.status,
+        CASE
+          WHEN CURRENT_DATE BETWEEN p.start_date AND p.end_date
+           AND LOCALTIME BETWEEN p.shift_start AND p.shift_end
+          THEN true
+          ELSE false
+        END AS can_check_in_now
+      FROM project_employees pe
+      JOIN projects p ON p.id = pe.project_id
+      JOIN sites s ON s.id = p.site_id
+      WHERE pe.employee_id = $1
+        AND p.status = 'active'
+      ORDER BY p.start_date DESC
+      `,
       [req.user.id]
     );
 
     const rows = result.rows.map(row => ({
       site_id: Number(row.site_id),
+      project_id: Number(row.project_id),
       name: row.name,
       radius_m: row.radius_m,
-      start_at: row.start_at,
-      end_at: row.end_at,
+      start_at: row.start_date,
+      end_at: row.end_date,
+      shift_start: row.shift_start,
+      shift_end: row.shift_end,
       can_check_in_now: row.can_check_in_now,
       assigned_visible: true
     }));
@@ -375,8 +385,8 @@ app.get("/me/assigned-sites", auth, async (req, res) => {
       sites: rows
     });
   } catch (err) {
-    console.error("Assigned sites error:", err);
-    res.status(500).json({ error: "Failed to load assigned sites" });
+    console.error("Assigned project sites error:", err);
+    res.status(500).json({ error: "Failed to load assigned project sites" });
   }
 });
 
@@ -1109,6 +1119,249 @@ app.post("/admin/assignments/:id/cancel", auth, adminOnly, async (req, res) => {
   } catch (err) {
     console.error("Cancel assignment error:", err);
     res.status(500).json({ error: "Failed to cancel assignment" });
+  }
+});
+
+app.get("/admin/projects", auth, adminOnly, async (req, res) => {
+  try {
+    const projectsResult = await pool.query(`
+      SELECT
+        p.id,
+        p.site_id,
+        s.name AS project_name,
+        s.latitude,
+        s.longitude,
+        s.radius_m,
+        p.start_date,
+        p.end_date,
+        p.shift_start,
+        p.shift_end,
+        p.status,
+        p.created_at
+      FROM projects p
+      JOIN sites s ON s.id = p.site_id
+      ORDER BY p.id DESC
+    `);
+
+    const employeesResult = await pool.query(`
+      SELECT
+        pe.project_id,
+        e.id,
+        e.full_name,
+        e.iqama_number,
+        e.employee_category
+      FROM project_employees pe
+      JOIN employees e ON e.id = pe.employee_id
+      ORDER BY e.full_name ASC
+    `);
+
+    const employeesByProject = {};
+
+    for (const row of employeesResult.rows) {
+      if (!employeesByProject[row.project_id]) {
+        employeesByProject[row.project_id] = [];
+      }
+
+      employeesByProject[row.project_id].push({
+        id: row.id,
+        full_name: row.full_name,
+        iqama_number: row.iqama_number,
+        employee_category: row.employee_category
+      });
+    }
+
+    const projects = projectsResult.rows.map(p => ({
+      ...p,
+      employees: employeesByProject[p.id] || []
+    }));
+
+    res.json({ projects });
+  } catch (err) {
+    console.error("Load projects error:", err);
+    res.status(500).json({ error: "Failed to load projects" });
+  }
+});
+
+app.post("/admin/projects", auth, adminOnly, async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const {
+      site_id,
+      start_date,
+      end_date,
+      shift_start,
+      shift_end,
+      employee_ids
+    } = req.body || {};
+
+    if (!site_id || !start_date || !end_date || !shift_start || !shift_end) {
+      return res.status(400).json({
+        error: "Missing site_id/start_date/end_date/shift_start/shift_end"
+      });
+    }
+
+    if (!Array.isArray(employee_ids) || employee_ids.length === 0) {
+      return res.status(400).json({
+        error: "Select at least one employee"
+      });
+    }
+
+    await client.query("BEGIN");
+
+    const projectResult = await client.query(
+      `
+      INSERT INTO projects
+      (site_id, start_date, end_date, shift_start, shift_end, status, created_at)
+      VALUES ($1, $2, $3, $4, $5, 'active', NOW())
+      RETURNING *
+      `,
+      [Number(site_id), start_date, end_date, shift_start, shift_end]
+    );
+
+    const project = projectResult.rows[0];
+
+    for (const employeeId of employee_ids) {
+      await client.query(
+        `
+        INSERT INTO project_employees
+        (project_id, employee_id, created_at)
+        VALUES ($1, $2, NOW())
+        `,
+        [projectId, Number(employeeId)]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    res.json({
+      ok: true,
+      project
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Create project error:", err);
+    res.status(500).json({ error: "Failed to create project" });
+  } finally {
+    client.release();
+  }
+});
+
+app.put("/admin/projects/:id", auth, adminOnly, async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const projectId = Number(req.params.id);
+
+    const {
+      site_id,
+      start_date,
+      end_date,
+      shift_start,
+      shift_end,
+      status,
+      employee_ids
+    } = req.body || {};
+
+    if (!site_id || !start_date || !end_date || !shift_start || !shift_end || !status) {
+      return res.status(400).json({
+        error: "Missing site_id/start_date/end_date/shift_start/shift_end/status"
+      });
+    }
+
+    if (!Array.isArray(employee_ids) || employee_ids.length === 0) {
+      return res.status(400).json({
+        error: "Select at least one employee"
+      });
+    }
+
+    await client.query("BEGIN");
+
+    const updateResult = await client.query(
+      `
+      UPDATE projects
+      SET site_id = $1,
+          start_date = $2,
+          end_date = $3,
+          shift_start = $4,
+          shift_end = $5,
+          status = $6
+      WHERE id = $7
+      RETURNING *
+      `,
+      [
+        Number(site_id),
+        start_date,
+        end_date,
+        shift_start,
+        shift_end,
+        status,
+        projectId
+      ]
+    );
+
+    if (updateResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    await client.query(
+      "DELETE FROM project_employees WHERE project_id = $1",
+      [projectId]
+    );
+
+    for (const employeeId of employee_ids) {
+      await client.query(
+        `
+        INSERT INTO project_employees
+        (project_id, employee_id, created_at)
+        VALUES ($1, $2, NOW())
+        ON CONFLICT (project_id, employee_id) DO NOTHING
+        `,
+        [projectId, Number(employeeId)]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    res.json({
+      ok: true,
+      project: updateResult.rows[0]
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Update project error:", err);
+    res.status(500).json({
+      error: "Failed to update project",
+      message: err.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/admin/projects/:id/cancel", auth, adminOnly, async (req, res) => {
+  try {
+    const projectId = Number(req.params.id);
+
+    const result = await pool.query(
+      `
+      UPDATE projects
+      SET status = 'cancelled'
+      WHERE id = $1
+      RETURNING id
+      `,
+      [projectId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Cancel project error:", err);
+    res.status(500).json({ error: "Failed to cancel project" });
   }
 });
 

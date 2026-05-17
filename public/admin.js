@@ -48,9 +48,10 @@ function showSection(sectionName) {
     home: document.getElementById("homeSection"),
     employees: document.getElementById("employeesSection"),
     sites: document.getElementById("sitesSection"),
+    projects: document.getElementById("projectsSection"),
     summary: document.getElementById("summarySection")
   };
-
+  if (sectionName === "projects") document.getElementById("projectsTabBtn")?.classList.add("active");
   Object.values(sections).forEach(section => {
     if (section) section.style.display = "none";
   });
@@ -145,6 +146,8 @@ async function loadOverview() {
   cachedEmployees = employees;
   renderSummaryEmployees();
   const sites = r.data.sites || [];
+  renderProjectFormOptions(employees, sites);
+  await loadProjects();
   const attendance = r.data.attendance || [];
 
   const empMap = new Map(employees.map(e => [e.id, e]));
@@ -361,6 +364,8 @@ document.getElementById("createEmpBtn")?.addEventListener("click", async () => {
 let currentSummaryPeriod = "daily";
 let selectedSummaryEmployeeId = null;
 let cachedEmployees = [];
+let editingProjectId = null;
+let cachedProjects = [];
 
 function renderSummaryEmployees() {
   const box = document.getElementById("summaryEmployeeList");
@@ -409,6 +414,185 @@ function setSummaryTab(period) {
   if (period === "monthly") document.getElementById("monthlySummaryBtn")?.classList.add("active");
 
   loadSummary();
+}
+
+function renderProjectFormOptions(employees, sites) {
+  const projectSite = document.getElementById("projectSite");
+  const projectEmployeesList = document.getElementById("projectEmployeesList");
+
+  if (projectSite) {
+    projectSite.innerHTML = sites.length
+      ? sites.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("")
+      : `<option value="">No sites found</option>`;
+  }
+
+  if (projectEmployeesList) {
+    const employeesOnly = employees.filter(e => !e.is_admin);
+
+    projectEmployeesList.innerHTML = employeesOnly.length
+      ? `
+        <div class="project-employee-grid">
+          ${employeesOnly.map(e => `
+            <label class="project-employee-item">
+              <input type="checkbox" class="projectEmployeeCheckbox" value="${e.id}" />
+              <span>
+                <strong>${esc(e.full_name)}</strong>
+                <small>${esc(e.iqama_number || "-")} • ${esc(e.employee_category || "-")}</small>
+              </span>
+            </label>
+          `).join("")}
+        </div>
+      `
+      : `<div class="small-note">No employees found.</div>`;
+  }
+}
+
+async function loadProjects() {
+  const box = document.getElementById("projectsList");
+  if (!box) return;
+
+  const r = await api("/admin/projects", { method: "GET" });
+
+  if (!r.ok) {
+    box.innerHTML = `<p class="message error">${esc(r.data.error || "Failed to load projects")}</p>`;
+    return;
+  }
+
+  const projects = r.data.projects || [];
+  cachedProjects = projects;
+
+  box.innerHTML = projects.length
+    ? `
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Project / Site</th>
+              <th>Start Date</th>
+              <th>End Date</th>
+              <th>Shift</th>
+              <th>Employees</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${projects.map(p => `
+              <tr>
+                <td>${esc(p.project_name)}</td>
+                <td>${esc(fmtDateOnly(p.start_date))}</td>
+                <td>${esc(fmtDateOnly(p.end_date))}</td>
+                <td>${esc(formatTime(p.shift_start))} - ${esc(formatTime(p.shift_end))}</td>
+                <td>
+                  ${
+                    p.employees.length
+                      ? p.employees.map(e => esc(e.full_name)).join(", ")
+                      : "No employees"
+                  }
+                </td>
+                <td>${esc(p.status)}</td>
+                <td>
+                  <div class="inline-actions" style="margin-top:0;">
+                    <button onclick="editProject(${p.id})" class="btn-secondary">
+                      Edit
+                    </button>
+
+                    ${
+                      p.status === "active"
+                        ? `<button onclick="cancelProject(${p.id})" class="btn-danger-small">Cancel</button>`
+                        : "-"
+                    }
+                  </div>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `
+    : `<div class="small-note">No projects created yet.</div>`;
+}
+
+function fmtDateOnly(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString();
+}
+
+function formatTime(value) {
+  if (!value) return "";
+  return String(value).slice(0, 5);
+}
+
+window.cancelProject = async function (projectId) {
+  if (!confirm("Cancel this project?")) return;
+
+  const r = await api(`/admin/projects/${projectId}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+
+  if (!r.ok) {
+    alert(r.data.error || "Failed to cancel project");
+    return;
+  }
+
+  alert("Project cancelled");
+  await loadProjects();
+};
+
+function toInputDate(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value).slice(0, 10);
+  return d.toISOString().slice(0, 10);
+}
+
+window.editProject = function (projectId) {
+  const project = cachedProjects.find(p => Number(p.id) === Number(projectId));
+  if (!project) return alert("Project not found");
+
+  editingProjectId = project.id;
+
+  document.getElementById("projectSite").value = project.site_id;
+  document.getElementById("projectStartDate").value = toInputDate(project.start_date);
+  document.getElementById("projectEndDate").value = toInputDate(project.end_date);
+  document.getElementById("projectShiftStart").value = String(project.shift_start).slice(0, 5);
+  document.getElementById("projectShiftEnd").value = String(project.shift_end).slice(0, 5);
+
+  const statusInput = document.getElementById("projectStatus");
+  if (statusInput) statusInput.value = project.status || "active";
+
+  const assignedIds = new Set((project.employees || []).map(e => Number(e.id)));
+
+  document.querySelectorAll(".projectEmployeeCheckbox").forEach(cb => {
+    cb.checked = assignedIds.has(Number(cb.value));
+  });
+
+  document.getElementById("createProjectBtn").textContent = "Update Project";
+  document.getElementById("cancelProjectEditBtn").style.display = "inline-flex";
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
+
+function resetProjectForm() {
+  editingProjectId = null;
+
+  document.getElementById("projectStartDate").value = "";
+  document.getElementById("projectEndDate").value = "";
+  document.getElementById("projectShiftStart").value = "";
+  document.getElementById("projectShiftEnd").value = "";
+
+  const statusInput = document.getElementById("projectStatus");
+  if (statusInput) statusInput.value = "active";
+
+  document.querySelectorAll(".projectEmployeeCheckbox").forEach(cb => {
+    cb.checked = false;
+  });
+
+  document.getElementById("createProjectBtn").textContent = "Create Project";
+  document.getElementById("cancelProjectEditBtn").style.display = "none";
 }
 
 async function loadSummary() {
@@ -478,6 +662,8 @@ async function loadSummary() {
   `;
 }
 
+
+
 document.getElementById("homeTabBtn")?.addEventListener("click", () => showSection("home"));
 document.getElementById("employeesTabBtn")?.addEventListener("click", () => showSection("employees"));
 document.getElementById("sitesTabBtn")?.addEventListener("click", () => showSection("sites"));
@@ -489,7 +675,63 @@ document.getElementById("summaryTabBtn")?.addEventListener("click", async () => 
 
 document.getElementById("goEmployeesBtn")?.addEventListener("click", () => showSection("employees"));
 document.getElementById("goSitesBtn")?.addEventListener("click", () => showSection("sites"));
+document.getElementById("createProjectBtn")?.addEventListener("click", async () => {
+  const site_id = document.getElementById("projectSite").value;
+  const start_date = document.getElementById("projectStartDate").value;
+  const end_date = document.getElementById("projectEndDate").value;
+  const shift_start = document.getElementById("projectShiftStart").value;
+  const shift_end = document.getElementById("projectShiftEnd").value;
+  const status = document.getElementById("projectStatus")?.value || "active";
 
+  const employee_ids = [...document.querySelectorAll(".projectEmployeeCheckbox:checked")]
+    .map(cb => Number(cb.value));
+
+  if (!site_id || !start_date || !end_date || !shift_start || !shift_end) {
+    alert("Please fill all project fields.");
+    return;
+  }
+
+  if (!employee_ids.length) {
+    alert("Please select at least one employee.");
+    return;
+  }
+
+  const payload = {
+    site_id: Number(site_id),
+    start_date,
+    end_date,
+    shift_start,
+    shift_end,
+    status,
+    employee_ids
+  };
+
+  const url = editingProjectId
+    ? `/admin/projects/${editingProjectId}`
+    : "/admin/projects";
+
+  const method = editingProjectId ? "PUT" : "POST";
+
+  const r = await api(url, {
+    method,
+    body: JSON.stringify(payload)
+  });
+
+  if (!r.ok) {
+    alert(r.data.message || r.data.error || "Failed to save project");
+    return;
+  }
+
+  alert(editingProjectId ? "Project updated" : "Project created");
+
+  resetProjectForm();
+  await loadProjects();
+});
+document.getElementById("cancelProjectEditBtn")?.addEventListener("click", resetProjectForm);
+document.getElementById("projectsTabBtn")?.addEventListener("click", async () => {
+  showSection("projects");
+  await loadProjects();
+});
 document.getElementById("dailySummaryBtn")?.addEventListener("click", () => setSummaryTab("daily"));
 document.getElementById("weeklySummaryBtn")?.addEventListener("click", () => setSummaryTab("weekly"));
 document.getElementById("monthlySummaryBtn")?.addEventListener("click", () => setSummaryTab("monthly"));
@@ -500,10 +742,6 @@ document.getElementById("summarySearchInput")?.addEventListener("input", () => {
 
 loadOverview();
 const initialHash = window.location.hash.replace("#", "");
-if (window.location.hash === "#summary") {
-  showSection("summary");
-  loadSummary();
-}
 if (initialHash === "summary") {
   showSection("summary");
   loadSummary();
@@ -511,6 +749,9 @@ if (initialHash === "summary") {
   showSection("employees");
 } else if (initialHash === "sites") {
   showSection("sites");
+} else if (initialHash === "projects") {
+  showSection("projects");
+  loadProjects();
 } else {
   showSection("home");
 }

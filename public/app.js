@@ -264,24 +264,30 @@ async function refresh() {
     const isFutureAssignment = !Number.isNaN(startMs) && startMs > Date.now();
 
     // PRIORITY 1: if this exact site is currently open
+    // PRIORITY 1: if this exact site is currently open
     if (isThisSiteOpen) {
       const start = Date.parse(currentOpen.check_in_at);
       const delta = Number.isNaN(start) ? 0 : (Date.now() - start);
       labelText = `Checked In • ${msToHuman(delta)} ago`;
     }
-    // PRIORITY 2: if this assignment is scheduled for future, always show it
-    else if (isFutureAssignment) {
-      labelText = `Scheduled • Starts at ${fmt(s.start_at)}`;
-    }
-    // PRIORITY 3: if checked into another site
+    // PRIORITY 2: if checked into another site
     else if (isCheckedIn && !isThisSiteOpen) {
       labelText = `Checked in at: ${currentOpen.site_name}`;
     }
-    // PRIORITY 4: otherwise show last checkout/checkin history
-    else if (last?.last_check_out_at) {
-      labelText = `Checked Out at: ${fmt(last.last_check_out_at)}`;
-    } else if (last?.last_check_in_at) {
-      labelText = `Last Check-in: ${fmt(last.last_check_in_at)}`;
+    // PRIORITY 3: show project shift/check-in timing
+    else {
+      const shiftStart = s.shift_start ? String(s.shift_start).slice(0, 5) : null;
+      const shiftEnd = s.shift_end ? String(s.shift_end).slice(0, 5) : null;
+
+      if (s.can_check_in_now) {
+        labelText = shiftStart && shiftEnd
+          ? `Check-in available now • Shift ${shiftStart} - ${shiftEnd}`
+          : "Check-in available now";
+      } else {
+        labelText = shiftStart
+          ? `Next Check-in: ${shiftStart}`
+          : "Check-in not available right now";
+      }
     }
 
     wrap.innerHTML = `
