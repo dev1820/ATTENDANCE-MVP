@@ -452,7 +452,25 @@ async function verifyPunch({ employeeId, siteId, pin, lat, lng, accuracy_m }) {
 
   const BUFFER = 20;
   if (distance > (Number(site.radius_m) + BUFFER)) {
-    return { ok: false, status: 403, error: `You are not at ${site.name}.` };
+    await pool.query(
+      `
+      INSERT INTO attendance_attempts
+      (employee_id, site_id, attempted_at, reason, distance_m, created_at)
+      VALUES ($1, $2, NOW(), $3, $4, NOW())
+      `,
+      [
+        employeeId,
+        site.id,
+        "Not on site",
+        Math.round(distance)
+      ]
+    );
+
+    return { 
+      ok: false, 
+      status: 403, 
+      error: `You are not at ${site.name}.` 
+    };
   }
 
   return {
@@ -1067,33 +1085,63 @@ app.get("/admin/summary", auth, adminOnly, async (req, res) => {
     const period = req.query.period || "daily";
     const employeeId = req.query.employee_id ? Number(req.query.employee_id) : null;
 
-    let dateFilter = "a.check_in_at::date = CURRENT_DATE";
+    let attendanceDateFilter = "a.check_in_at::date = CURRENT_DATE";
+    let attemptDateFilter = "aa.attempted_at::date = CURRENT_DATE";
 
     if (period === "weekly") {
-      dateFilter = "a.check_in_at >= date_trunc('week', NOW())";
+      attendanceDateFilter = "a.check_in_at >= date_trunc('week', NOW())";
+      attemptDateFilter = "aa.attempted_at >= date_trunc('week', NOW())";
     }
 
     if (period === "monthly") {
-      dateFilter = "a.check_in_at >= date_trunc('month', NOW())";
+      attendanceDateFilter = "a.check_in_at >= date_trunc('month', NOW())";
+      attemptDateFilter = "aa.attempted_at >= date_trunc('month', NOW())";
     }
 
     const result = await pool.query(
       `
-      SELECT
-        e.id AS employee_id,
-        e.full_name,
-        e.iqama_number,
-        s.name AS site_name,
-        a.check_in_at,
-        a.check_out_at,
-        a.method
-      FROM attendance a
-      JOIN employees e ON e.id = a.employee_id
-      LEFT JOIN sites s ON s.id = a.site_id
-      WHERE e.is_admin = false
-        AND ${dateFilter}
-        AND ($1::int IS NULL OR e.id = $1::int)
-      ORDER BY a.check_in_at DESC
+      SELECT *
+      FROM (
+        SELECT
+          e.id AS employee_id,
+          e.full_name,
+          e.iqama_number,
+          s.name AS site_name,
+          a.check_in_at,
+          a.check_out_at,
+          a.method,
+          'success' AS record_type,
+          NULL::int AS distance_m,
+          a.check_in_at AS record_time
+        FROM attendance a
+        JOIN employees e ON e.id = a.employee_id
+        LEFT JOIN sites s ON s.id = a.site_id
+        WHERE e.is_admin = false
+          AND ${attendanceDateFilter}
+          AND ($1::int IS NULL OR e.id = $1::int)
+
+        UNION ALL
+
+        SELECT
+          e.id AS employee_id,
+          e.full_name,
+          e.iqama_number,
+          'Not on site' AS site_name,
+          aa.attempted_at AS check_in_at,
+          NULL::timestamp AS check_out_at,
+          aa.reason AS method,
+          'failed_offsite' AS record_type,
+          aa.distance_m,
+          aa.attempted_at AS record_time
+        FROM attendance_attempts aa
+        JOIN employees e ON e.id = aa.employee_id
+        LEFT JOIN sites s ON s.id = aa.site_id
+        WHERE e.is_admin = false
+          AND aa.reason = 'Not on site'
+          AND ${attemptDateFilter}
+          AND ($1::int IS NULL OR e.id = $1::int)
+      ) x
+      ORDER BY record_time DESC
       `,
       [employeeId]
     );
@@ -1221,12 +1269,12 @@ app.post("/admin/projects", auth, adminOnly, async (req, res) => {
       INSERT INTO projects
       (site_id, start_date, end_date, shift_start, shift_end, status, created_at)
       VALUES ($1, $2, $3, $4, $5, 'active', NOW())
-      RETURNING *
+      RETURNING id
       `,
       [Number(site_id), start_date, end_date, shift_start, shift_end]
     );
 
-    const project = projectResult.rows[0];
+    const projectId = projectResult.rows[0].id;
 
     for (const employeeId of employee_ids) {
       await client.query(
@@ -1234,8 +1282,9 @@ app.post("/admin/projects", auth, adminOnly, async (req, res) => {
         INSERT INTO project_employees
         (project_id, employee_id, created_at)
         VALUES ($1, $2, NOW())
+        ON CONFLICT (project_id, employee_id) DO NOTHING
         `,
-        [project.id, Number(employeeId)]
+        [projectId, Number(employeeId)]
       );
     }
 
@@ -1243,7 +1292,7 @@ app.post("/admin/projects", auth, adminOnly, async (req, res) => {
 
     res.json({
       ok: true,
-      project
+      project_id: projectId
     });
   } catch (err) {
     await client.query("ROLLBACK");

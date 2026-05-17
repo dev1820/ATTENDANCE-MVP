@@ -636,13 +636,36 @@ async function loadSummary() {
           ${
             rows.length
               ? rows.map(row => `
-                <tr>
+                <tr class="${row.record_type === "failed_offsite" ? "summary-alert-row" : ""}">
                   <td>${esc(row.full_name)}</td>
+
                   <td>${esc(row.iqama_number)}</td>
-                  <td>${esc(row.site_name || "Unknown")}</td>
+
+                  <td>
+                    ${
+                      row.record_type === "failed_offsite"
+                        ? `<span class="not-on-site-badge">Not on site</span>`
+                        : esc(row.site_name || "Unknown")
+                    }
+                  </td>
+
                   <td>${esc(fmt(row.check_in_at))}</td>
-                  <td>${esc(row.check_out_at ? fmt(row.check_out_at) : "Open")}</td>
-                  <td>${esc(row.method || "")}</td>
+
+                  <td>
+                    ${
+                      row.record_type === "failed_offsite"
+                        ? "N/A"
+                        : esc(row.check_out_at ? fmt(row.check_out_at) : "Open")
+                    }
+                  </td>
+
+                  <td>
+                    ${
+                      row.record_type === "failed_offsite"
+                        ? `Attempted outside range${row.distance_m ? ` • ${row.distance_m}m away` : ""}`
+                        : esc(row.method || "")
+                    }
+                  </td>
                 </tr>
               `).join("")
               : `
