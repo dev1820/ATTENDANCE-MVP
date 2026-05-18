@@ -1450,7 +1450,8 @@ app.put("/admin/projects/:id", auth, adminOnly, async (req, res) => {
         shift_start,
         shift_end,
         status,
-        projectId
+        projectId,
+        manager_email
       ]
     );
 
