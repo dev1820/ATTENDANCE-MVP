@@ -1449,9 +1449,9 @@ app.put("/admin/projects/:id", auth, adminOnly, async (req, res) => {
         end_date,
         shift_start,
         shift_end,
+        manager_email,
         status,
-        projectId,
-        manager_email
+        projectId
       ]
     );
 
