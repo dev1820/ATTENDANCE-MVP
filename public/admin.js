@@ -132,6 +132,19 @@ window.showSelectedFileName = function (employeeId) {
     : "No image selected";
 };
 
+window.showProjectEmployees = function (projectId) {
+  const project = cachedProjects.find(p => Number(p.id) === Number(projectId));
+  if (!project) return alert("Project not found");
+
+  const list = project.employees?.length
+    ? project.employees.map(e =>
+        `${e.full_name} - ${e.iqama_number || "-"} - ${e.employee_category || "-"}`
+      ).join("\n")
+    : "No employees assigned.";
+
+  alert(list);
+};
+
 async function loadOverview() {
   const r = await api("/admin/overview", { method: "GET" });
 
@@ -537,11 +550,9 @@ async function loadProjects() {
                 <td>${esc(fmtDateOnly(p.end_date))}</td>
                 <td>${esc(formatTime(p.shift_start))} - ${esc(formatTime(p.shift_end))}</td>
                 <td>
-                  ${
-                    p.employees.length
-                      ? p.employees.map(e => esc(e.full_name)).join(", ")
-                      : "No employees"
-                  }
+                  <button class="link-btn" onclick="showProjectEmployees(${p.id})">
+                    View employees (${p.employees?.length || 0})
+                  </button>
                 </td>
                 <td>${esc(p.status)}</td>
                 <td>
