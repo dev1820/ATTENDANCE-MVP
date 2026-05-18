@@ -64,8 +64,13 @@ function auth(req, res, next) {
   }
 }
 
-function isValidIqama(iqama) {
-  return /^\d{10}$/.test(String(iqama || "").trim());
+function isValidIqamaOrPassport(value) {
+  const v = String(value || "").trim().toUpperCase();
+
+  const iqamaPattern = /^\d{10}$/;
+  const passportPattern = /^[A-Z]{2}\d{7}$/;
+
+  return iqamaPattern.test(v) || passportPattern.test(v);
 }
 
 function cleanupExpiredFaceVerifications() {
@@ -225,7 +230,7 @@ app.post("/auth/login", async (req, res) => {
   } else if (iqama_number) {
     const iqama = String(iqama_number).trim();
 
-    if (!isValidIqama(iqama)) {
+    if (!isValidIqamaOrPassport(iqama)) {
       return res.status(400).json({ error: "Iqama number must be exactly 10 digits" });
     }
 
@@ -733,11 +738,11 @@ app.post("/admin/employees", auth, adminOnly, async (req, res) => {
       });
     }
 
-    const iqama = String(iqama_number).trim();
+    const iqama = String(iqama_number).trim().toUpperCase();
     const category = String(employee_category).trim();
 
-    if (!isValidIqama(iqama)) {
-      return res.status(400).json({ error: "Iqama number must be exactly 10 digits" });
+    if (!isValidIqamaOrPassport(iqama)) {
+      return res.status(400).json({ error: "Iqama/Passport must be either 10 digits or 2 capital letters followed by 7 digits" });
     }
 
     if (!["StarCare", "Outsider"].includes(category)) {
@@ -774,6 +779,95 @@ app.post("/admin/employees", auth, adminOnly, async (req, res) => {
   } catch (err) {
     console.error("Create employee error:", err);
     res.status(500).json({ error: "Failed to create employee" });
+  }
+});
+
+app.put("/admin/employees/:id", auth, adminOnly, async (req, res) => {
+  try {
+    const employeeId = Number(req.params.id);
+    const { full_name, iqama_number, employee_category, password } = req.body || {};
+
+    if (!full_name || !iqama_number || !employee_category) {
+      return res.status(400).json({
+        error: "Missing full_name / iqama_number / employee_category"
+      });
+    }
+
+    const iqama = String(iqama_number).trim().toUpperCase();
+    const category = String(employee_category).trim();
+
+    if (!isValidIqamaOrPassport(iqama)) {
+      return res.status(400).json({
+        error: "Iqama/Passport must be either 10 digits or 2 capital letters followed by 7 digits"
+      });
+    }
+
+    if (!["StarCare", "Outsider"].includes(category)) {
+      return res.status(400).json({
+        error: "employee_category must be StarCare or Outsider"
+      });
+    }
+
+    const existing = await pool.query(
+      `SELECT id FROM employees
+       WHERE iqama_number = $1 AND id <> $2`,
+      [iqama, employeeId]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(409).json({
+        error: "Iqama/Passport number already exists"
+      });
+    }
+
+    let result;
+
+    if (password && String(password).trim()) {
+      result = await pool.query(
+        `UPDATE employees
+         SET full_name = $1,
+             iqama_number = $2,
+             employee_category = $3,
+             password_hash = $4
+         WHERE id = $5 AND is_admin = false
+         RETURNING id, full_name, iqama_number, employee_category, face_enrolled`,
+        [
+          String(full_name).trim(),
+          iqama,
+          category,
+          bcrypt.hashSync(String(password).trim(), 10),
+          employeeId
+        ]
+      );
+    } else {
+      result = await pool.query(
+        `UPDATE employees
+         SET full_name = $1,
+             iqama_number = $2,
+             employee_category = $3
+         WHERE id = $4 AND is_admin = false
+         RETURNING id, full_name, iqama_number, employee_category, face_enrolled`,
+        [
+          String(full_name).trim(),
+          iqama,
+          category,
+          employeeId
+        ]
+      );
+    }
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
+
+    res.json({
+      ok: true,
+      employee: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error("Update employee error:", err);
+    res.status(500).json({ error: "Failed to update employee" });
   }
 });
 
@@ -1192,6 +1286,7 @@ app.get("/admin/projects", auth, adminOnly, async (req, res) => {
         p.shift_start,
         p.shift_end,
         p.status,
+        p.manager_email,
         p.created_at
       FROM projects p
       JOIN sites s ON s.id = p.site_id
@@ -1247,10 +1342,11 @@ app.post("/admin/projects", auth, adminOnly, async (req, res) => {
       end_date,
       shift_start,
       shift_end,
-      employee_ids
+      employee_ids,
+      manager_email
     } = req.body || {};
 
-    if (!site_id || !start_date || !end_date || !shift_start || !shift_end) {
+    if (!site_id || !start_date || !end_date || !shift_start || !shift_end || !manager_email) {
       return res.status(400).json({
         error: "Missing site_id/start_date/end_date/shift_start/shift_end"
       });
@@ -1267,11 +1363,11 @@ app.post("/admin/projects", auth, adminOnly, async (req, res) => {
     const projectResult = await client.query(
       `
       INSERT INTO projects
-      (site_id, start_date, end_date, shift_start, shift_end, status, created_at)
-      VALUES ($1, $2, $3, $4, $5, 'active', NOW())
+      (site_id, start_date, end_date, shift_start, shift_end, manager_email, status, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW())
       RETURNING id
       `,
-      [Number(site_id), start_date, end_date, shift_start, shift_end]
+      [Number(site_id), start_date, end_date, shift_start, shift_end, manager_email]
     );
 
     const projectId = projectResult.rows[0].id;
@@ -1316,7 +1412,8 @@ app.put("/admin/projects/:id", auth, adminOnly, async (req, res) => {
       shift_start,
       shift_end,
       status,
-      employee_ids
+      employee_ids,
+      manager_email
     } = req.body || {};
 
     if (!site_id || !start_date || !end_date || !shift_start || !shift_end || !status) {
@@ -1341,8 +1438,9 @@ app.put("/admin/projects/:id", auth, adminOnly, async (req, res) => {
           end_date = $3,
           shift_start = $4,
           shift_end = $5,
-          status = $6
-      WHERE id = $7
+          manager_email = $6,
+          status = $7
+      WHERE id = $8
       RETURNING *
       `,
       [

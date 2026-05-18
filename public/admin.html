@@ -68,7 +68,7 @@
 
           <div class="grid grid-4">
             <input id="empName" placeholder="Full name" />
-            <input id="empIqama" placeholder="10-digit iqama number" maxlength="10" inputmode="numeric" />
+            <input id="empIqama" placeholder="Iqama or Passport number" maxlength="10" />
             <input id="empPass" placeholder="Password" />
             <select id="empCategory">
               <option value="">Select category</option>
@@ -79,6 +79,9 @@
 
           <div class="inline-actions">
             <button id="createEmpBtn" class="btn-primary">Create Employee</button>
+            <button id="cancelEmpEditBtn" class="btn-secondary" style="display:none;">
+              Cancel Edit
+            </button>
           </div>
         </div>
 
@@ -176,6 +179,15 @@
             <div>
               <label>Shift End</label>
               <input id="projectShiftEnd" type="time" />
+            </div>
+
+            <div>
+              <label>Manager Email</label>
+              <input
+                id="projectManagerEmail"
+                type="email"
+                placeholder="manager@company.com"
+              />
             </div>
 
           </div>

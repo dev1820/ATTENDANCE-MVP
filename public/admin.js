@@ -198,9 +198,17 @@ async function loadOverview() {
                   </td>
                   <td>
                     ${!e.is_admin ? `
-                      <button onclick="enrollFaceFromUpload(${e.id})" class="btn-secondary">
-                        Upload
-                      </button>
+                      <div class="inline-actions" style="margin-top:0;">
+                        
+                        <button onclick="editEmployee(${e.id})" class="btn-secondary">
+                          Edit
+                        </button>
+
+                        <button onclick="enrollFaceFromUpload(${e.id})" class="btn-secondary">
+                          Upload Face
+                        </button>
+
+                      </div>
                     ` : "-"}
                   </td>
                 </tr>
@@ -279,6 +287,38 @@ async function loadOverview() {
   }
 }
 
+window.editEmployee = function (employeeId) {
+  const employee = cachedEmployees.find(e => Number(e.id) === Number(employeeId));
+  if (!employee) return alert("Employee not found");
+
+  editingEmployeeId = employee.id;
+
+  document.getElementById("empName").value = employee.full_name || "";
+  document.getElementById("empIqama").value = employee.iqama_number || "";
+  document.getElementById("empPass").value = "";
+  document.getElementById("empPass").placeholder = "Leave blank to keep current password";
+  document.getElementById("empCategory").value = employee.employee_category || "";
+
+  document.getElementById("createEmpBtn").textContent = "Update Employee";
+  document.getElementById("cancelEmpEditBtn").style.display = "inline-flex";
+
+  showSection("employees");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
+
+function resetEmployeeForm() {
+  editingEmployeeId = null;
+
+  document.getElementById("empName").value = "";
+  document.getElementById("empIqama").value = "";
+  document.getElementById("empPass").value = "";
+  document.getElementById("empPass").placeholder = "Password";
+  document.getElementById("empCategory").value = "";
+
+  document.getElementById("createEmpBtn").textContent = "Create Employee";
+  document.getElementById("cancelEmpEditBtn").style.display = "none";
+}
+
 window.resetPin = async (siteId) => {
   const pin = document.getElementById(`pin_${siteId}`).value.trim();
   if (!pin) return alert("Enter a PIN");
@@ -327,37 +367,49 @@ document.getElementById("createSiteBtn")?.addEventListener("click", async () => 
 
 document.getElementById("createEmpBtn")?.addEventListener("click", async () => {
   const full_name = document.getElementById("empName").value.trim();
-  const iqama_number = document.getElementById("empIqama").value.trim();
+  const iqama_number = document.getElementById("empIqama").value.trim().toUpperCase();
   const password = document.getElementById("empPass").value.trim();
   const employee_category = document.getElementById("empCategory").value;
 
-  if (!full_name || !iqama_number || !password || !employee_category) {
-    alert("Please fill all employee fields.");
+  if (!full_name || !iqama_number || !employee_category) {
+    alert("Please fill employee name, iqama/passport, and category.");
     return;
   }
 
-  const r = await api("/admin/employees", {
-    method: "POST",
-    body: JSON.stringify({
-      full_name,
-      iqama_number,
-      password,
-      employee_category
-    })
+  if (!editingEmployeeId && !password) {
+    alert("Please enter a password for the new employee.");
+    return;
+  }
+
+  const payload = {
+    full_name,
+    iqama_number,
+    employee_category
+  };
+
+  if (password) {
+    payload.password = password;
+  }
+
+  const url = editingEmployeeId
+    ? `/admin/employees/${editingEmployeeId}`
+    : "/admin/employees";
+
+  const method = editingEmployeeId ? "PUT" : "POST";
+
+  const r = await api(url, {
+    method,
+    body: JSON.stringify(payload)
   });
 
   if (!r.ok) {
-    alert(r.data.error || "Failed to create employee");
+    alert(r.data.error || "Failed to save employee");
     return;
   }
 
-  alert("Employee created");
+  alert(editingEmployeeId ? "Employee updated" : "Employee created");
 
-  document.getElementById("empName").value = "";
-  document.getElementById("empIqama").value = "";
-  document.getElementById("empPass").value = "";
-  document.getElementById("empCategory").value = "";
-
+  resetEmployeeForm();
   await loadOverview();
 });
 
@@ -366,6 +418,7 @@ let selectedSummaryEmployeeId = null;
 let cachedEmployees = [];
 let editingProjectId = null;
 let cachedProjects = [];
+let editingEmployeeId = null;
 
 function renderSummaryEmployees() {
   const box = document.getElementById("summaryEmployeeList");
@@ -560,7 +613,7 @@ window.editProject = function (projectId) {
   document.getElementById("projectEndDate").value = toInputDate(project.end_date);
   document.getElementById("projectShiftStart").value = String(project.shift_start).slice(0, 5);
   document.getElementById("projectShiftEnd").value = String(project.shift_end).slice(0, 5);
-
+  document.getElementById("projectManagerEmail").value = project.manager_email || "";
   const statusInput = document.getElementById("projectStatus");
   if (statusInput) statusInput.value = project.status || "active";
 
@@ -583,7 +636,7 @@ function resetProjectForm() {
   document.getElementById("projectEndDate").value = "";
   document.getElementById("projectShiftStart").value = "";
   document.getElementById("projectShiftEnd").value = "";
-
+  document.getElementById("projectManagerEmail").value = "";
   const statusInput = document.getElementById("projectStatus");
   if (statusInput) statusInput.value = "active";
 
@@ -705,11 +758,12 @@ document.getElementById("createProjectBtn")?.addEventListener("click", async () 
   const shift_start = document.getElementById("projectShiftStart").value;
   const shift_end = document.getElementById("projectShiftEnd").value;
   const status = document.getElementById("projectStatus")?.value || "active";
+  const manager_email = document.getElementById("projectManagerEmail").value.trim();
 
   const employee_ids = [...document.querySelectorAll(".projectEmployeeCheckbox:checked")]
     .map(cb => Number(cb.value));
 
-  if (!site_id || !start_date || !end_date || !shift_start || !shift_end) {
+  if (!site_id || !start_date || !end_date || !shift_start || !shift_end || !manager_email) {
     alert("Please fill all project fields.");
     return;
   }
@@ -725,6 +779,7 @@ document.getElementById("createProjectBtn")?.addEventListener("click", async () 
     end_date,
     shift_start,
     shift_end,
+    manager_email,
     status,
     employee_ids
   };
@@ -759,6 +814,7 @@ document.getElementById("dailySummaryBtn")?.addEventListener("click", () => setS
 document.getElementById("weeklySummaryBtn")?.addEventListener("click", () => setSummaryTab("weekly"));
 document.getElementById("monthlySummaryBtn")?.addEventListener("click", () => setSummaryTab("monthly"));
 document.getElementById("clearSummaryEmployeeBtn")?.addEventListener("click", clearSummaryEmployeeFilter);
+document.getElementById("cancelEmpEditBtn")?.addEventListener("click", resetEmployeeForm);
 document.getElementById("summarySearchInput")?.addEventListener("input", () => {
   loadSummary();
 });
