@@ -136,8 +136,11 @@ window.showProjectEmployees = function (projectId) {
   const project = cachedProjects.find(p => Number(p.id) === Number(projectId));
   if (!project) return alert("Project not found");
 
-  const list = project.employees?.length
-    ? project.employees.map(e =>
+  const sortedEmployees = [...(project.employees || [])]
+    .sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+  const list = sortedEmployees.length
+    ? sortedEmployees.map(e =>
         `${e.full_name} - ${e.iqama_number || "-"} - ${e.employee_category || "-"}`
       ).join("\n")
     : "No employees assigned.";
@@ -155,7 +158,9 @@ async function loadOverview() {
 
   showError("");
 
-  const employees = r.data.employees || [];
+  const employees = (r.data.employees || []).sort((a, b) =>
+    a.full_name.localeCompare(b.full_name)
+  );
   cachedEmployees = employees;
   renderSummaryEmployees();
   const sites = r.data.sites || [];
