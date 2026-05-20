@@ -36,11 +36,61 @@ function esc(s) {
   }[m]));
 }
 
-function fmt(iso) {
+function fmt12(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso);
   return d.toLocaleString();
+}
+
+function formatShift(timeStr) {
+  if (!timeStr) return "-";
+
+  const [h, m] = timeStr.slice(0, 5).split(":");
+
+  const d = new Date();
+  d.setHours(Number(h), Number(m));
+
+  return d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true
+  });
+}
+
+function fmt12(dateStr) {
+  if (!dateStr) return "-";
+
+  return new Date(dateStr).toLocaleString("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  });
+}
+
+function dateOnly(dateStr) {
+  if (!dateStr) return "-";
+
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
+}
+
+function timeOnly(dateStr) {
+  if (!dateStr) return "-";
+
+  return new Date(dateStr).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  });
 }
 
 function showSection(sectionName) {
@@ -49,7 +99,8 @@ function showSection(sectionName) {
     employees: document.getElementById("employeesSection"),
     sites: document.getElementById("sitesSection"),
     projects: document.getElementById("projectsSection"),
-    summary: document.getElementById("summarySection")
+    summary: document.getElementById("summarySection"),
+    overtime: document.getElementById("overtimeSection")
   };
   if (sectionName === "projects") document.getElementById("projectsTabBtn")?.classList.add("active");
   Object.values(sections).forEach(section => {
@@ -68,6 +119,7 @@ function showSection(sectionName) {
   if (sectionName === "employees") document.getElementById("employeesTabBtn")?.classList.add("active");
   if (sectionName === "sites") document.getElementById("sitesTabBtn")?.classList.add("active");
   if (sectionName === "summary") document.getElementById("summaryTabBtn")?.classList.add("active");
+  if (sectionName === "overtime") document.getElementById("overtimeTabBtn")?.classList.add("active");
 }
 
 async function enrollFaceFromUpload(employeeId) {
@@ -118,6 +170,108 @@ async function enrollFaceFromUpload(employeeId) {
 
   reader.readAsDataURL(file);
 }
+
+async function loadOvertimeRequests() {
+  const box = document.getElementById("overtimeRequestsList");
+  if (!box) return;
+
+  const r = await api("/admin/overtime-requests", { method: "GET" });
+
+  if (!r.ok) {
+    box.innerHTML = `<p class="message error">${esc(r.data.error || "Failed to load overtime requests")}</p>`;
+    return;
+  }
+
+  const requests = r.data.requests || [];
+
+  box.innerHTML = requests.length
+    ? `
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Iqama/Passport</th>
+              <th>Site</th>
+              <th>Reason</th>
+              <th>Status</th>
+              <th>Requested At</th>
+              <th>Deadline</th>
+              <th>Actual Checkout</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${requests.map(req => `
+              <tr>
+                <td>${esc(req.full_name)}</td>
+                <td>${esc(req.iqama_number || "-")}</td>
+                <td>${esc(req.site_name || "-")}</td>
+                <td>${esc(req.reason || "-")}</td>
+                <td>${esc(req.status)}</td>
+                <td>${esc(fmt12(req.requested_at))}</td>
+                <td>${esc(fmt12(req.deadline_at))}</td>
+                <td>${esc(req.actual_check_out_at ? fmt12(req.actual_check_out_at) : "-")}</td>
+                <td>
+                  ${
+                    req.status === "pending"
+                      ? `
+                        <div class="inline-actions" style="margin-top:0;">
+                          <button onclick="approveOvertime(${req.id})" class="btn-secondary">
+                            Approve
+                          </button>
+                          <button onclick="rejectOvertime(${req.id})" class="btn-danger-small">
+                            Reject
+                          </button>
+                        </div>
+                      `
+                      : "-"
+                  }
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `
+    : `<div class="small-note">No overtime requests found.</div>`;
+}
+
+window.approveOvertime = async function (requestId) {
+  if (!confirm("Approve this overtime request?")) return;
+
+  const r = await api(`/admin/overtime-requests/${requestId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+
+  if (!r.ok) {
+    alert(r.data.error || "Failed to approve overtime");
+    return;
+  }
+
+  alert("Overtime approved");
+  await loadOvertimeRequests();
+  await loadSummary();
+};
+
+window.rejectOvertime = async function (requestId) {
+  if (!confirm("Reject this overtime request? Checkout will be trimmed to shift end.")) return;
+
+  const r = await api(`/admin/overtime-requests/${requestId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+
+  if (!r.ok) {
+    alert(r.data.error || "Failed to reject overtime");
+    return;
+  }
+
+  alert("Overtime rejected and checkout trimmed");
+  await loadOvertimeRequests();
+  await loadSummary();
+};
 
 window.enrollFaceFromUpload = enrollFaceFromUpload;
 
@@ -263,7 +417,7 @@ async function loadOverview() {
                   <td>${esc(String(s.latitude))}</td>
                   <td>${esc(String(s.longitude))}</td>
                   <td>${esc(String(s.radius_m))}m</td>
-                  <td>${esc(fmt(s.pin_updated_at))}</td>
+                  <td>${esc(fmt12(s.pin_updated_at))}</td>
                   <td>
                     <input id="pin_${s.id}" placeholder="New PIN" class="table-input" />
                   </td>
@@ -296,8 +450,8 @@ async function loadOverview() {
           return `
             <div class="attendance-item">
               <div class="list-card-title">${esc(employeeLabel)} @ ${esc(s?.name || "Unknown")}</div>
-              <div class="small-note">IN: ${esc(fmt(a.check_in_at))}</div>
-              <div class="small-note">OUT: ${esc(a.check_out_at ? fmt(a.check_out_at) : "(open)")}</div>
+              <div class="small-note">IN: ${esc(fmt12(a.check_in_at))}</div>
+              <div class="small-note">OUT: ${esc(a.check_out_at ? fmt12(a.check_out_at) : "(open)")}</div>
             </div>
           `;
         }).join("")
@@ -553,7 +707,7 @@ async function loadProjects() {
                 <td>${esc(p.project_name)}</td>
                 <td>${esc(fmtDateOnly(p.start_date))}</td>
                 <td>${esc(fmtDateOnly(p.end_date))}</td>
-                <td>${esc(formatTime(p.shift_start))} - ${esc(formatTime(p.shift_end))}</td>
+                <td>${esc(formatShift(p.shift_start))} - ${esc(formatShift(p.shift_end))}</td>
                 <td>
                   <button class="link-btn" onclick="showProjectEmployees(${p.id})">
                     View employees (${p.employees?.length || 0})
@@ -696,8 +850,10 @@ async function loadSummary() {
             <th>Employee Name</th>
             <th>Iqama Number</th>
             <th>Site</th>
+            <th>Date</th>
             <th>Check In</th>
             <th>Check Out</th>
+            <th>Overtime</th>
             <th>Method</th>
           </tr>
         </thead>
@@ -706,6 +862,7 @@ async function loadSummary() {
             rows.length
               ? rows.map(row => `
                 <tr class="${row.record_type === "failed_offsite" ? "summary-alert-row" : ""}">
+                  
                   <td>${esc(row.full_name)}</td>
 
                   <td>${esc(row.iqama_number)}</td>
@@ -718,16 +875,24 @@ async function loadSummary() {
                     }
                   </td>
 
-                  <td>${esc(fmt(row.check_in_at))}</td>
+                  <td>${esc(dateOnly(row.check_in_at))}</td>
+
+                  <td>${esc(timeOnly(row.check_in_at))}</td>
 
                   <td>
                     ${
                       row.record_type === "failed_offsite"
                         ? "N/A"
-                        : esc(row.check_out_at ? fmt(row.check_out_at) : "Open")
+                        : esc(row.check_out_at ? timeOnly(row.check_out_at) : "Open")
                     }
                   </td>
-
+                  <td>
+                    ${
+                      row.overtime_status && row.overtime_status !== "none"
+                        ? esc(row.overtime_status)
+                        : "-"
+                    }
+                  </td>
                   <td>
                     ${
                       row.record_type === "failed_offsite"
@@ -735,12 +900,20 @@ async function loadSummary() {
                         : esc(row.method || "")
                     }
                   </td>
+
                 </tr>
               `).join("")
               : `
                 <tr>
                   <td>${esc(selectedEmployee?.full_name || "N/A")}</td>
                   <td>${esc(selectedEmployee?.iqama_number || "N/A")}</td>
+                  <td>
+                    ${
+                      row.overtime_status && row.overtime_status !== "none"
+                        ? esc(row.overtime_status)
+                        : "-"
+                    }
+                  </td>
                   <td>N/A</td>
                   <td>N/A</td>
                   <td>N/A</td>
@@ -764,7 +937,25 @@ document.getElementById("summaryTabBtn")?.addEventListener("click", async () => 
   showSection("summary");
   await loadSummary();
 });
+document.getElementById("overtimeTabBtn")?.addEventListener("click", async () => {
+  showSection("overtime");
+  await loadOvertimeRequests();
+});
+document.getElementById("finaliseExpiredOvertimeBtn")?.addEventListener("click", async () => {
+  const r = await api("/admin/overtime-requests/finalise-expired", {
+    method: "POST",
+    body: JSON.stringify({})
+  });
 
+  if (!r.ok) {
+    alert(r.data.error || "Failed to finalise expired overtime");
+    return;
+  }
+
+  alert(`Finalised ${r.data.finalised || 0} expired overtime request(s).`);
+  await loadOvertimeRequests();
+  await loadSummary();
+});
 document.getElementById("goEmployeesBtn")?.addEventListener("click", () => showSection("employees"));
 document.getElementById("goSitesBtn")?.addEventListener("click", () => showSection("sites"));
 document.getElementById("createProjectBtn")?.addEventListener("click", async () => {
@@ -847,6 +1038,9 @@ if (initialHash === "summary") {
 } else if (initialHash === "projects") {
   showSection("projects");
   loadProjects();
+} else if (initialHash === "overtime") {
+  showSection("overtime");
+  loadOvertimeRequests();
 } else {
   showSection("home");
 }

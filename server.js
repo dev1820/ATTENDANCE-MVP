@@ -3,6 +3,7 @@ const express = require("express");
 const helmet = require("helmet");
 const path = require("path");
 const bcrypt = require("bcryptjs");
+const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
 
 const pool = require("./db");
@@ -26,6 +27,16 @@ const awsCreds = {
   secretAccessKey: (process.env.AWS_SECRET_ACCESS_KEY || "").trim()
 };
 
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT || 587),
+  secure: Number(process.env.SMTP_PORT) === 465,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+});
+
 if (!awsCreds.accessKeyId || !awsCreds.secretAccessKey) {
   throw new Error("AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY is missing in .env");
 }
@@ -34,6 +45,38 @@ const rekognition = new RekognitionClient({
   region: AWS_REGION,
   credentials: awsCreds
 });
+
+const mailer = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+});
+
+async function sendOvertimeEmail({ to, employeeName, iqamaNumber, siteName, reason, requestedAt }) {
+  if (!to) return;
+
+  await mailer.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to,
+    subject: `Overtime Request - ${employeeName}`,
+    html: `
+      <h2>Overtime Request Submitted</h2>
+      <p><b>Employee:</b> ${employeeName}</p>
+      <p><b>Iqama/Passport:</b> ${iqamaNumber}</p>
+      <p><b>Site:</b> ${siteName}</p>
+      <p><b>Reason:</b> ${reason || "-"}</p>
+      <p><b>Requested At:</b> ${requestedAt}</p>
+      <p>Please review this request in the Attendance Admin Panel.</p>
+    `
+  });
+}
 
 const app = express();
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -625,22 +668,316 @@ app.post("/attendance/check-out", auth, async (req, res) => {
       return res.status(v.status).json({ error: v.error });
     }
 
+    const projectResult = await pool.query(
+      `
+      SELECT
+        p.id AS project_id,
+        p.shift_end
+      FROM project_employees pe
+      JOIN projects p ON p.id = pe.project_id
+      WHERE pe.employee_id = $1
+        AND p.site_id = $2
+        AND p.status = 'active'
+        AND CURRENT_DATE BETWEEN p.start_date AND p.end_date
+      ORDER BY p.id DESC
+      LIMIT 1
+      `,
+      [employeeId, Number(site_id)]
+    );
+
+    if (projectResult.rows.length === 0) {
+      return res.status(403).json({
+        error: "No active project found for this site."
+      });
+    }
+
+    const project = projectResult.rows[0];
+
+    const now = new Date();
+
+    const shiftEndDateTime = new Date();
+    const [shiftHour, shiftMinute] = String(project.shift_end)
+      .slice(0, 5)
+      .split(":")
+      .map(Number);
+
+    shiftEndDateTime.setHours(shiftHour, shiftMinute, 0, 0);
+
+    const isLateCheckout = now > shiftEndDateTime;
+
+    let overtimeRequest = null;
+
+    if (isLateCheckout) {
+      const otResult = await pool.query(
+        `
+        SELECT *
+        FROM overtime_requests
+        WHERE employee_id = $1
+          AND project_id = $2
+          AND site_id = $3
+          AND status = 'pending'
+          AND requested_at::date = CURRENT_DATE
+        ORDER BY id DESC
+        LIMIT 1
+        `,
+        [employeeId, project.project_id, Number(site_id)]
+      );
+
+      overtimeRequest = otResult.rows[0] || null;
+    }
+
+    let finalCheckoutTime = now;
+    let overtimeStatus = "none";
+    let overtimeRequestId = null;
+
+    if (isLateCheckout) {
+      if (overtimeRequest) {
+        finalCheckoutTime = now;
+        overtimeStatus = "pending";
+        overtimeRequestId = overtimeRequest.id;
+      } else {
+        finalCheckoutTime = shiftEndDateTime;
+        overtimeStatus = "auto";
+      }
+    }
+
     await pool.query(
       `UPDATE attendance
-       SET check_out_at = NOW()
-       WHERE id = $1`,
-      [open.id]
+       SET check_out_at = $1,
+           actual_check_out_at = $2,
+           overtime_status = $3,
+           overtime_request_id = $4
+       WHERE id = $5`,
+      [
+        finalCheckoutTime,
+        now,
+        overtimeStatus,
+        overtimeRequestId,
+        open.id
+      ]
     );
+
+    if (overtimeRequestId) {
+      await pool.query(
+        `UPDATE overtime_requests
+         SET attendance_id = $1
+         WHERE id = $2`,
+        [open.id, overtimeRequestId]
+      );
+    }
 
     res.json({
       ok: true,
       site: v.site.name,
-      check_out_at: v.now
+      check_out_at: finalCheckoutTime,
+      actual_check_out_at: now,
+      overtime_status: overtimeStatus
     });
 
   } catch (err) {
     console.error("Check-out error:", err);
-    res.status(500).json({ error: "Failed to check out" });
+    res.status(500).json({
+      error: "Failed to check out",
+      message: err.message
+    });
+  }
+});
+
+app.get("/admin/overtime-requests", auth, adminOnly, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        ot.id,
+        ot.attendance_id,
+        ot.employee_id,
+        e.full_name,
+        e.iqama_number,
+        s.name AS site_name,
+        p.shift_end,
+        ot.manager_email,
+        ot.reason,
+        ot.status,
+        ot.requested_at,
+        ot.deadline_at,
+        a.check_out_at,
+        a.actual_check_out_at
+      FROM overtime_requests ot
+      JOIN employees e ON e.id = ot.employee_id
+      JOIN sites s ON s.id = ot.site_id
+      JOIN projects p ON p.id = ot.project_id
+      LEFT JOIN attendance a ON a.id = ot.attendance_id
+      ORDER BY ot.requested_at DESC
+    `);
+
+    res.json({ requests: result.rows });
+  } catch (err) {
+    console.error("Load overtime requests error:", err);
+    res.status(500).json({ error: "Failed to load overtime requests" });
+  }
+});
+
+app.post("/admin/overtime-requests/:id/approve", auth, adminOnly, async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const overtimeResult = await client.query(
+      `
+      SELECT *
+      FROM overtime_requests
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [Number(req.params.id)]
+    );
+
+    if (overtimeResult.rows.length === 0) {
+      return res.status(404).json({ error: "Request not found" });
+    }
+
+    const overtime = overtimeResult.rows[0];
+
+    await client.query(
+      `
+      UPDATE overtime_requests
+      SET status = 'approved',
+          approved_at = NOW()
+      WHERE id = $1
+      `,
+      [overtime.id]
+    );
+
+    if (overtime.attendance_id) {
+      await client.query(
+        `
+        UPDATE attendance
+        SET overtime_status = 'approved'
+        WHERE id = $1
+        `,
+        [overtime.attendance_id]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    res.json({ ok: true });
+
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Approve overtime error:", err);
+    res.status(500).json({ error: "Failed to approve overtime" });
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/admin/overtime-requests/:id/reject", auth, adminOnly, async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const overtimeResult = await client.query(
+      `
+      SELECT
+        ot.*,
+        p.shift_end
+      FROM overtime_requests ot
+      JOIN projects p ON p.id = ot.project_id
+      WHERE ot.id = $1
+      LIMIT 1
+      `,
+      [Number(req.params.id)]
+    );
+
+    if (overtimeResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Request not found" });
+    }
+
+    const overtime = overtimeResult.rows[0];
+
+    // Find attendance_id if it was not linked during checkout
+    let attendanceId = overtime.attendance_id;
+
+    if (!attendanceId) {
+      const attendanceResult = await client.query(
+        `
+        SELECT id
+        FROM attendance
+        WHERE employee_id = $1
+          AND site_id = $2
+          AND check_in_at::date = $3::date
+        ORDER BY id DESC
+        LIMIT 1
+        `,
+        [
+          overtime.employee_id,
+          overtime.site_id,
+          overtime.requested_at
+        ]
+      );
+
+      attendanceId = attendanceResult.rows[0]?.id || null;
+
+      if (attendanceId) {
+        await client.query(
+          `
+          UPDATE overtime_requests
+          SET attendance_id = $1
+          WHERE id = $2
+          `,
+          [attendanceId, overtime.id]
+        );
+      }
+    }
+
+    await client.query(
+      `
+      UPDATE overtime_requests
+      SET status = 'rejected',
+          rejected_at = NOW()
+      WHERE id = $1
+      `,
+      [overtime.id]
+    );
+
+    if (attendanceId) {
+      const shiftEnd = new Date(overtime.requested_at);
+
+      const [h, m] = String(overtime.shift_end)
+        .slice(0, 5)
+        .split(":")
+        .map(Number);
+
+      shiftEnd.setHours(h, m, 0, 0);
+
+      await client.query(
+        `
+        UPDATE attendance
+        SET check_out_at = $1,
+            overtime_status = 'rejected',
+            overtime_request_id = $2
+        WHERE id = $3
+        `,
+        [shiftEnd, overtime.id, attendanceId]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    res.json({ ok: true });
+
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Reject overtime error:", err);
+    res.status(500).json({
+      error: "Failed to reject overtime",
+      message: err.message
+    });
+  } finally {
+    client.release();
   }
 });
 
@@ -1201,6 +1538,9 @@ app.get("/admin/summary", auth, adminOnly, async (req, res) => {
           e.full_name,
           e.iqama_number,
           s.name AS site_name,
+          a.overtime_status,
+          a.actual_check_out_at,
+          a.overtime_request_id,
           a.check_in_at,
           a.check_out_at,
           a.method,
@@ -1217,16 +1557,19 @@ app.get("/admin/summary", auth, adminOnly, async (req, res) => {
         UNION ALL
 
         SELECT
-          e.id AS employee_id,
-          e.full_name,
-          e.iqama_number,
-          'Not on site' AS site_name,
-          aa.attempted_at AS check_in_at,
-          NULL::timestamp AS check_out_at,
-          aa.reason AS method,
-          'failed_offsite' AS record_type,
-          aa.distance_m,
-          aa.attempted_at AS record_time
+        e.id AS employee_id,
+        e.full_name,
+        e.iqama_number,
+        'Not on site' AS site_name,
+        NULL::text AS overtime_status,
+        NULL::timestamp AS actual_check_out_at,
+        NULL::int AS overtime_request_id,
+        aa.attempted_at AS check_in_at,
+        NULL::timestamp AS check_out_at,
+        aa.reason AS method,
+        'failed_offsite' AS record_type,
+        aa.distance_m,
+        aa.attempted_at AS record_time
         FROM attendance_attempts aa
         JOIN employees e ON e.id = aa.employee_id
         LEFT JOIN sites s ON s.id = aa.site_id
@@ -1526,6 +1869,154 @@ app.get("/assignments", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "assignments.html"));
 });
 app.get("/admin", (req, res) => res.sendFile(path.join(__dirname, "public", "admin.html")));
+
+app.post("/me/overtime-request", auth, async (req, res) => {
+  try {
+    const employeeId = Number(req.user.id);
+    const { site_id, reason } = req.body || {};
+
+    if (!site_id) {
+      return res.status(400).json({ error: "Missing site_id" });
+    }
+
+    const projectResult = await pool.query(
+      `
+      SELECT 
+        p.id AS project_id,
+        p.manager_email,
+        s.id AS site_id,
+        s.name AS site_name,
+        e.full_name,
+        e.iqama_number
+      FROM project_employees pe
+      JOIN projects p ON p.id = pe.project_id
+      JOIN sites s ON s.id = p.site_id
+      JOIN employees e ON e.id = pe.employee_id
+      WHERE pe.employee_id = $1
+        AND p.site_id = $2
+        AND p.status = 'active'
+        AND CURRENT_DATE BETWEEN p.start_date AND p.end_date
+      ORDER BY p.id DESC
+      LIMIT 1
+      `,
+      [employeeId, Number(site_id)]
+    );
+
+    if (projectResult.rows.length === 0) {
+      return res.status(403).json({ error: "You are not assigned to this project" });
+    }
+
+    const project = projectResult.rows[0];
+
+    const insertResult = await pool.query(
+      `
+      INSERT INTO overtime_requests
+      (employee_id, project_id, site_id, manager_email, reason, status, requested_at, deadline_at, created_at)
+      VALUES ($1, $2, $3, $4, $5, 'pending', NOW(), NOW() + INTERVAL '48 hours', NOW())
+      RETURNING id
+      `,
+      [
+        employeeId,
+        project.project_id,
+        project.site_id,
+        project.manager_email,
+        reason || null
+      ]
+    );
+    
+    console.log("OT request saved. Now sending email...");
+    console.log("Manager email:", project.manager_email);
+
+    try {
+      await sendOvertimeEmail({
+        to: project.manager_email,
+        employeeName: project.full_name,
+        iqamaNumber: project.iqama_number,
+        siteName: project.site_name,
+        reason,
+        requestedAt: new Date().toLocaleString()
+      });
+
+      console.log("Email function completed");
+    } catch (emailErr) {
+      console.error("Email send failed:", emailErr);
+    }
+
+    res.json({
+      ok: true,
+      request_id: insertResult.rows[0].id
+    });
+
+  } catch (err) {
+    console.error("Overtime request error:", err);
+    res.status(500).json({
+      error: "Failed to submit overtime request",
+      message: err.message
+    });
+  }
+});
+
+app.post("/admin/overtime-requests/finalise-expired", auth, adminOnly, async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const expired = await client.query(`
+      SELECT
+        ot.id,
+        ot.attendance_id,
+        ot.requested_at,
+        p.shift_end
+      FROM overtime_requests ot
+      JOIN projects p ON p.id = ot.project_id
+      WHERE ot.status = 'pending'
+        AND ot.deadline_at <= NOW()
+      FOR UPDATE
+    `);
+
+    for (const req of expired.rows) {
+      await client.query(
+        `
+        UPDATE overtime_requests
+        SET status = 'expired',
+            rejected_at = NOW()
+        WHERE id = $1
+        `,
+        [req.id]
+      );
+
+      if (req.attendance_id) {
+        const shiftEndDateTime = new Date(req.requested_at);
+        const [h, m] = String(req.shift_end).slice(0, 5).split(":").map(Number);
+        shiftEndDateTime.setHours(h, m, 0, 0);
+
+        await client.query(
+          `
+          UPDATE attendance
+          SET check_out_at = $1,
+              overtime_status = 'expired'
+          WHERE id = $2
+          `,
+          [shiftEndDateTime, req.attendance_id]
+        );
+      }
+    }
+
+    await client.query("COMMIT");
+
+    res.json({
+      ok: true,
+      finalised: expired.rows.length
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Finalise expired overtime error:", err);
+    res.status(500).json({ error: "Failed to finalise expired overtime" });
+  } finally {
+    client.release();
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Running on http://localhost:${PORT}`);

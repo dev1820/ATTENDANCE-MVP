@@ -18,7 +18,9 @@
       <button id="projectsTabBtn" class="sidebar-link sidebar-button">Projects</button>
       <a href="/assignments" class="sidebar-link">Assignments</a>
       <button id="summaryTabBtn" class="sidebar-link sidebar-button">Summary</button>
+      <button id="overtimeTabBtn" class="sidebar-link sidebar-button">Overtime</button>
       <button id="logoutBtn" class="sidebar-link sidebar-button logout">Logout</button>
+      
     </aside>
 
     <main class="page">
@@ -258,6 +260,28 @@
 
             <div id="summaryTable"></div>
           </div>
+        </div>
+      </section>
+      
+
+      <!-- OVERTIME REQUEST SECTION -->
+
+      <section id="overtimeSection" class="admin-section" style="display:none;">
+        <div class="page-header">
+          <div>
+            <h2 class="page-title">Overtime Requests</h2>
+            <p class="page-subtitle">
+              Review pending overtime requests and approve or reject them.
+            </p>
+          </div>
+        </div>
+
+        <div class="card section">
+          <h3>Requests</h3>
+          <button id="finaliseExpiredOvertimeBtn" class="btn-secondary">
+            Finalise Expired Overtime
+          </button>
+          <div id="overtimeRequestsList"></div>
         </div>
       </section>
 

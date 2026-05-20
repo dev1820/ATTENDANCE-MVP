@@ -31,11 +31,40 @@ function esc(s) {
   }[m]));
 }
 
-function fmt(iso) {
+function fmt12(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso);
   return d.toLocaleString();
+}
+
+function formatShift(timeStr) {
+  if (!timeStr) return "-";
+
+  const [h, m] = timeStr.slice(0, 5).split(":");
+
+  const d = new Date();
+  d.setHours(Number(h), Number(m));
+
+  return d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true
+  });
+}
+
+function fmt12(dateStr) {
+  if (!dateStr) return "-";
+
+  return new Date(dateStr).toLocaleString("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  });
 }
 
 function datetimeLocalToIso(value) {
@@ -105,8 +134,8 @@ async function loadAssignmentsPage() {
       return `
         <div class="list-card">
           <div class="list-card-title">${esc(e?.full_name || "Unknown Employee")} → ${esc(s?.name || "Unknown Site")}</div>
-          <div class="small-note">Start: ${esc(fmt(a.start_at))}</div>
-          <div class="small-note">End: ${esc(a.end_at ? fmt(a.end_at) : "(no end)")}</div>
+          <div class="small-note">Start: ${esc(fmt12(a.start_at))}</div>
+          <div class="small-note">End: ${esc(a.end_at ? fmt12(a.end_at) : "(no end)")}</div>
           <div class="small-note">Status: ${esc(a.status)}</div>
           ${a.status === "active" ? `
             <div class="inline-actions">

@@ -46,11 +46,54 @@ async function api(path, opts={}) {
   return { ok: r.ok, status: r.status, data };
 }
 
-function fmt(iso) {
+function fmt12(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso);
   return d.toLocaleString();
+}
+
+function fmt12(dateStr) {
+  if (!dateStr) return "-";
+
+  return new Date(dateStr).toLocaleString("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  });
+}
+
+function formatShift(timeStr) {
+  if (!timeStr) return "-";
+
+  const [h, m] = timeStr.slice(0, 5).split(":");
+
+  const d = new Date();
+  d.setHours(Number(h), Number(m));
+
+  return d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true
+  });
+}
+
+function fmt12(dateStr) {
+  if (!dateStr) return "-";
+
+  return new Date(dateStr).toLocaleString("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  });
 }
 
 function getLocation() {
@@ -99,6 +142,28 @@ function openPin(site_id, site_name, action) {
   document.getElementById("pinMsg").textContent = "";
   document.getElementById("pinBox").style.display = "block";
   window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+}
+
+async function requestOvertime(siteId) {
+  const reason = prompt("Enter overtime reason:");
+
+  if (reason === null) return;
+
+  const r = await api("/me/overtime-request", {
+    method: "POST",
+    body: JSON.stringify({
+      site_id: siteId,
+      reason: reason.trim()
+    })
+  });
+
+  if (!r.ok) {
+    alert(r.data.error || "Failed to submit overtime request");
+    return;
+  }
+
+  alert("Overtime request submitted successfully.");
+  await loadApp();
 }
 
 document.getElementById("confirmBtn").onclick = async () => {
@@ -183,7 +248,7 @@ async function refresh() {
     statusBox.innerHTML = `
       <b>Checked in:</b> Yes<br/>
       <b>Site:</b> ${currentOpen.site_name}<br/>
-      <b>Since:</b> ${fmt(currentOpen.check_in_at)}<br/>
+      <b>Since:</b> ${fmt12(currentOpen.check_in_at)}<br/>
       <b>Elapsed:</b> ${msToHuman(delta)}
     `;
     startTicker();
@@ -314,11 +379,18 @@ async function refresh() {
           style="margin-top:8px; margin-left:8px;">
           Check-out
         </button>
+
+        <button
+          onclick="requestOvertime(${s.site_id})"
+          class="btn-secondary"
+          style="margin-top:8px; margin-left:8px;">
+          Request Overtime
+        </button>
       ` : ""}
     `;
 
     // attach handlers only for visible/enabled buttons
-    wrap.querySelectorAll("button").forEach(btn => {
+    wrap.querySelectorAll("button[data-action]").forEach(btn => {
       btn.onclick = () => {
         if (btn.disabled) return;
         openPin(btn.dataset.site, btn.dataset.name, btn.dataset.action);
