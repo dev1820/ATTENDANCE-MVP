@@ -29,9 +29,8 @@ const awsCreds = {
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: 587,
-  secure: false,
-  requireTLS: true,
+  port: Number(process.env.SMTP_PORT),
+  secure: Number(process.env.SMTP_PORT) === 465,
   family: 4,
   auth: {
     user: process.env.SMTP_USER,

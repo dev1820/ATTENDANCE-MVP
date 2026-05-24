@@ -1,0 +1,6 @@
+node_modules
+.git
+.env
+render_backup.sql
+.DS_Store
+face-ui/node_modules
