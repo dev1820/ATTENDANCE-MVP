@@ -3,7 +3,7 @@ const express = require("express");
 const helmet = require("helmet");
 const path = require("path");
 const bcrypt = require("bcryptjs");
-const nodemailer = require("nodemailer");
+const { google } = require("googleapis");
 const jwt = require("jsonwebtoken");
 
 const pool = require("./db");
@@ -27,17 +27,78 @@ const awsCreds = {
   secretAccessKey: (process.env.AWS_SECRET_ACCESS_KEY || "").trim()
 };
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  family: 4,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
-  },
-  connectionTimeout: 30000,
-  greetingTimeout: 30000,
-  socketTimeout: 30000
+const gmailOAuthClient = new google.auth.OAuth2(
+  process.env.GMAIL_CLIENT_ID,
+  process.env.GMAIL_CLIENT_SECRET,
+  "https://developers.google.com/oauthplayground"
+);
+
+gmailOAuthClient.setCredentials({
+  refresh_token: process.env.GMAIL_REFRESH_TOKEN
 });
+
+const gmail = google.gmail({
+  version: "v1",
+  auth: gmailOAuthClient
+});
+
+function makeEmail({ to, from, subject, html }) {
+  const message = [
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    "MIME-Version: 1.0",
+    'Content-Type: text/html; charset="UTF-8"',
+    "",
+    html
+  ].join("\n");
+
+  return Buffer.from(message)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+async function sendOvertimeEmail({
+  to,
+  employeeName,
+  iqamaNumber,
+  siteName,
+  reason,
+  requestedAt
+}) {
+  if (!to) {
+    console.log("No manager email found. Skipping Gmail API email.");
+    return;
+  }
+
+  const from = process.env.GMAIL_FROM || process.env.SMTP_USER;
+
+  const raw = makeEmail({
+    from,
+    to,
+    subject: `Overtime Request - ${employeeName}`,
+    html: `
+      <h2>Overtime Request Submitted</h2>
+      <p><b>Employee:</b> ${employeeName}</p>
+      <p><b>Iqama/Passport:</b> ${iqamaNumber || "-"}</p>
+      <p><b>Site:</b> ${siteName || "-"}</p>
+      <p><b>Reason:</b> ${reason || "-"}</p>
+      <p><b>Requested At:</b> ${requestedAt}</p>
+      <p>Please review this request in the Attendance Admin Panel.</p>
+    `
+  });
+
+  const result = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: {
+      raw
+    }
+  });
+
+  console.log("Gmail API email sent:", result.data.id);
+}
 
 if (!awsCreds.accessKeyId || !awsCreds.secretAccessKey) {
   throw new Error("AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY is missing in .env");
