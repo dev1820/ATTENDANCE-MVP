@@ -60,6 +60,14 @@ function makeEmail({ to, from, subject, html }) {
     .replace(/=+$/, "");
 }
 
+function encodeEmail(message) {
+  return Buffer.from(message)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
 async function sendOvertimeEmail({
   to,
   employeeName,
